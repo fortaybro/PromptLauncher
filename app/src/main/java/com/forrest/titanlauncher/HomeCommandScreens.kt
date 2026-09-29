@@ -109,6 +109,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
@@ -1389,6 +1390,37 @@ fun TitanHomeScreen(
                 false
             )
         )
+    }
+
+    /*
+     * Third search target next to chrome and claude. While it is
+     * selected, plain typed text looks for an app instead of searching
+     * the web. Symbol and word commands still work. Remembered between
+     * uses like the other two.
+     */
+    var searchInApps by remember {
+        mutableStateOf(
+            searchPrefs.getBoolean(
+                "use_apps",
+                false
+            )
+        )
+    }
+
+    fun setSearchInApps(
+        useApps: Boolean
+    ) {
+
+        searchInApps =
+            useApps
+
+        searchPrefs
+            .edit()
+            .putBoolean(
+                "use_apps",
+                useApps
+            )
+            .apply()
     }
 
     fun setSearchWithClaude(
@@ -4050,6 +4082,72 @@ fun TitanHomeScreen(
                     )
         ) {
 
+            /*
+             * Apps target: enter opens the best-matching app and never
+             * falls through to a web search. The picker above the bar
+             * handles enter when it has matches; this covers the case
+             * where nothing matched.
+             */
+            if (
+                showSearchTargetPicker &&
+                searchInApps
+            ) {
+
+                val bestApp =
+                    findPromptAppMatches(
+                        apps =
+                            runCatching {
+                                loadLaunchableApps(
+                                    context
+                                )
+                            }
+                                .getOrDefault(
+                                    emptyList()
+                                ),
+                        query =
+                            raw
+                    )
+                        .firstOrNull()
+
+                val launchIntent =
+                    bestApp
+                        ?.let {
+                            context
+                                .packageManager
+                                .getLaunchIntentForPackage(
+                                    it.packageName
+                                )
+                        }
+
+                if (
+                    launchIntent == null
+                ) {
+
+                    setStatusText(
+                        "NO APP MATCHES \"$raw\""
+                    )
+
+                    return
+                }
+
+                runCatching {
+                    context.startActivity(
+                        launchIntent
+                    )
+                }
+                    .onSuccess {
+                        commandText =
+                            ""
+                    }
+                    .onFailure {
+                        setStatusText(
+                            "APP COULD NOT OPEN"
+                        )
+                    }
+
+                return
+            }
+
             commandText =
                 ""
 
@@ -4223,6 +4321,76 @@ fun TitanHomeScreen(
         inlineAppMatches.size
     ) {
         inlineAppSelectionIndex =
+            0
+    }
+
+    /*
+     * Apps target: plain text becomes an app search shown in place of
+     * the command legend. Symbol and word commands are left alone.
+     */
+    val appsModeActive =
+        showSearchTargetPicker &&
+                searchInApps &&
+                isPlainLauncherText(
+                    commandText
+                )
+
+    /*
+     * Read the installed apps once each time the prompt opens rather
+     * than on every keystroke.
+     */
+    val appsModeAppList =
+        remember(
+            appsModeActive
+        ) {
+            if (
+                appsModeActive
+            ) {
+                runCatching {
+                    loadLaunchableApps(
+                        context
+                    )
+                }
+                    .getOrDefault(
+                        emptyList()
+                    )
+            } else {
+                emptyList()
+            }
+        }
+
+    val appsModeMatches =
+        remember(
+            appsModeActive,
+            commandText,
+            appsModeAppList
+        ) {
+            if (
+                appsModeActive
+            ) {
+                findPromptAppMatches(
+                    apps =
+                        appsModeAppList,
+                    query =
+                        commandText
+                )
+                    .take(
+                        PromptAppListRows
+                    )
+            } else {
+                emptyList()
+            }
+        }
+
+    var appsModeSelectionIndex by remember {
+        mutableStateOf(0)
+    }
+
+    LaunchedEffect(
+        commandText,
+        appsModeMatches.size
+    ) {
+        appsModeSelectionIndex =
             0
     }
 
@@ -5473,29 +5641,72 @@ fun TitanHomeScreen(
                     groupComposeQuery.isBlank()
                 ) {
 
-                    CommandHintsCard(
-                        commandText =
-                            commandText,
-                        onCommandSelected = {
-                                selectedCommand ->
+                    /*
+                     * With the apps target on, the app list takes the
+                     * legend's place. The legend stays in the layout
+                     * (invisible) so nothing above or below moves.
+                     */
+                    Box {
 
-                            commandText =
-                                selectedCommand
-
-                            inlineContactSelectionIndex =
-                                0
-
-                            scope.launch {
-
-                                delay(
-                                    20
+                        Box(
+                            modifier =
+                                Modifier.alpha(
+                                    if (
+                                        appsModeActive
+                                    ) {
+                                        0f
+                                    } else {
+                                        1f
+                                    }
                                 )
+                        ) {
 
-                                focusRequester
-                                    .requestFocus()
-                            }
+                            CommandHintsCard(
+                                commandText =
+                                    commandText,
+                                onCommandSelected = {
+                                        selectedCommand ->
+
+                                    commandText =
+                                        selectedCommand
+
+                                    inlineContactSelectionIndex =
+                                        0
+
+                                    scope.launch {
+
+                                        delay(
+                                            20
+                                        )
+
+                                        focusRequester
+                                            .requestFocus()
+                                    }
+                                }
+                            )
                         }
-                    )
+
+                        if (
+                            appsModeActive
+                        ) {
+
+                            PromptAppListPanel(
+                                apps =
+                                    appsModeMatches,
+                                selectedIndex =
+                                    appsModeSelectionIndex,
+                                onChooseApp = {
+                                        app ->
+
+                                    chooseInlineApp(
+                                        app
+                                    )
+                                },
+                                modifier =
+                                    Modifier.matchParentSize()
+                            )
+                        }
+                    }
 
                     Spacer(
                         modifier =
@@ -5544,17 +5755,31 @@ fun TitanHomeScreen(
 
                         SearchTargetChip(
                             label = "chrome",
-                            selected = !searchWithClaude,
+                            selected =
+                                !searchInApps &&
+                                        !searchWithClaude,
                             onClick = {
+                                setSearchInApps(false)
                                 setSearchWithClaude(false)
                             }
                         )
 
                         SearchTargetChip(
                             label = "claude",
-                            selected = searchWithClaude,
+                            selected =
+                                !searchInApps &&
+                                        searchWithClaude,
                             onClick = {
+                                setSearchInApps(false)
                                 setSearchWithClaude(true)
+                            }
+                        )
+
+                        SearchTargetChip(
+                            label = "apps",
+                            selected = searchInApps,
+                            onClick = {
+                                setSearchInApps(true)
                             }
                         )
                     }
@@ -5630,13 +5855,26 @@ fun TitanHomeScreen(
                     showCommandHelp = true
                 },
                 hasInlineSuggestions =
-                    inlineContactMatches.isNotEmpty() ||
+                    appsModeMatches.isNotEmpty() ||
+                            inlineContactMatches.isNotEmpty() ||
                             inlineAppMatches.isNotEmpty() ||
                             groupContactMatches.isNotEmpty(),
                 onNavigateInlineSuggestion = {
                         delta ->
 
                     if (
+                        appsModeMatches.isNotEmpty()
+                    ) {
+                        appsModeSelectionIndex =
+                            (
+                                    appsModeSelectionIndex +
+                                            delta
+                                    )
+                                .coerceIn(
+                                    0,
+                                    appsModeMatches.lastIndex
+                                )
+                    } else if (
                         groupContactMatches.isNotEmpty()
                     ) {
                         groupSelectionIndex =
@@ -5677,6 +5915,20 @@ fun TitanHomeScreen(
                 onChooseInlineSuggestion = {
 
                     if (
+                        appsModeMatches.isNotEmpty()
+                    ) {
+
+                        appsModeMatches
+                            .getOrNull(
+                                appsModeSelectionIndex
+                            )
+                            ?.let {
+                                chooseInlineApp(
+                                    it
+                                )
+                            }
+
+                    } else if (
                         groupContactMatches.isNotEmpty()
                     ) {
 
@@ -10770,5 +11022,309 @@ private fun SearchTargetChip(
             textAlign = TextAlign.Center,
             fontWeight = FontWeight.Medium
         )
+    }
+}
+
+
+/*
+ * Rows the apps panel shows. Sized to fit inside the command legend's
+ * footprint, which the panel covers.
+ */
+internal const val PromptAppListRows = 4
+
+/*
+ * True for text that is not a symbol command ("@", "/", ".", ...) and
+ * not a word command ("settings", "go ...", ...): the text the search
+ * target chips act on.
+ */
+internal fun isPlainLauncherText(
+    text: String
+): Boolean {
+
+    val trimmed =
+        text.trim()
+
+    if (
+        trimmed.isBlank() ||
+        trimmed.first() in LauncherSymbolCommands
+    ) {
+        return false
+    }
+
+    val lowered =
+        trimmed.lowercase()
+
+    return LauncherLegacyCommands.none { word ->
+        lowered == word ||
+                lowered.startsWith(
+                    "$word "
+                )
+    }
+}
+
+/*
+ * App search for the apps target. Names that start with the query come
+ * first, then names with a word starting with it, then any other name
+ * containing it.
+ */
+internal fun findPromptAppMatches(
+    apps: List<LauncherAppEntry>,
+    query: String
+): List<LauncherAppEntry> {
+
+    val cleaned =
+        query.trim()
+
+    if (
+        cleaned.isBlank()
+    ) {
+        return emptyList()
+    }
+
+    fun rank(
+        app: LauncherAppEntry
+    ): Int {
+        val label =
+            app.label
+
+        return when {
+            label.startsWith(
+                cleaned,
+                ignoreCase = true
+            ) ->
+                0
+
+            label
+                .split(' ', '-', '_', '.')
+                .any {
+                    it.startsWith(
+                        cleaned,
+                        ignoreCase = true
+                    )
+                } ->
+                1
+
+            label.contains(
+                cleaned,
+                ignoreCase = true
+            ) ->
+                2
+
+            else ->
+                3
+        }
+    }
+
+    return apps
+        .map { it to rank(it) }
+        .filter { (_, score) -> score < 3 }
+        .sortedWith(
+            compareBy<Pair<LauncherAppEntry, Int>> { it.second }
+                .thenBy { it.first.label.lowercase() }
+        )
+        .map { it.first }
+}
+
+/*
+ * The apps target's list, drawn over the command legend at exactly the
+ * legend's size so the rest of the prompt never moves.
+ */
+@Composable
+private fun PromptAppListPanel(
+    apps: List<LauncherAppEntry>,
+    selectedIndex: Int,
+    onChooseApp: (LauncherAppEntry) -> Unit,
+    modifier: Modifier = Modifier
+) {
+
+    Column(
+        modifier =
+            modifier
+                .clipToBounds()
+                .background(
+                    SurfaceBlack.copy(
+                        alpha =
+                            0.96f
+                    ),
+                    RoundedCornerShape(
+                        12.dp
+                    )
+                )
+                .border(
+                    width =
+                        0.8.dp,
+                    color =
+                        BorderGray,
+                    shape =
+                        RoundedCornerShape(
+                            12.dp
+                        )
+                )
+                /*
+                 * Swallow taps that land between rows so they never
+                 * reach the hidden legend underneath.
+                 */
+                .pointerInput(Unit) {
+                    detectTapGestures { }
+                }
+                .padding(
+                    horizontal =
+                        8.dp,
+                    vertical =
+                        7.dp
+                )
+    ) {
+
+        Text(
+            text =
+                "apps",
+            color =
+                SecondaryText,
+            fontSize =
+                8.5.sp,
+            fontFamily =
+                InterfaceFont
+        )
+
+        Spacer(
+            modifier =
+                Modifier.height(
+                    4.dp
+                )
+        )
+
+        if (
+            apps.isEmpty()
+        ) {
+
+            Text(
+                text =
+                    "no matching apps",
+                color =
+                    TertiaryText,
+                fontSize =
+                    9.sp,
+                fontFamily =
+                    InterfaceFont,
+                modifier =
+                    Modifier.padding(
+                        horizontal = 6.dp,
+                        vertical = 4.dp
+                    )
+            )
+        }
+
+        apps.forEachIndexed { index, app ->
+
+            val selected =
+                index == selectedIndex
+
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(
+                            min = 25.dp
+                        )
+                        .background(
+                            if (
+                                selected
+                            ) {
+                                HomeCommandSurface.copy(
+                                    alpha = 0.78f
+                                )
+                            } else {
+                                Color.Transparent
+                            },
+                            RoundedCornerShape(
+                                7.dp
+                            )
+                        )
+                        .clickable {
+                            onChooseApp(
+                                app
+                            )
+                        }
+                        .padding(
+                            horizontal = 6.dp,
+                            vertical = 3.dp
+                        ),
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
+                Text(
+                    text =
+                        if (
+                            selected
+                        ) {
+                            ">"
+                        } else {
+                            " "
+                        },
+                    color =
+                        AccentOrange,
+                    fontSize =
+                        9.sp,
+                    fontFamily =
+                        InterfaceFont,
+                    fontWeight =
+                        FontWeight.Bold,
+                    modifier =
+                        Modifier.width(
+                            14.dp
+                        )
+                )
+
+                Text(
+                    text =
+                        app.label.lowercase(),
+                    color =
+                        PrimaryText,
+                    fontSize =
+                        9.5.sp,
+                    lineHeight =
+                        10.sp,
+                    fontFamily =
+                        InterfaceFont,
+                    maxLines =
+                        1,
+                    overflow =
+                        TextOverflow.Ellipsis,
+                    modifier =
+                        Modifier.weight(
+                            1f
+                        )
+                )
+
+                val appIcon =
+                    rememberAppIconBitmap(
+                        app.packageName
+                    )
+
+                if (
+                    appIcon != null
+                ) {
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                6.dp
+                            )
+                    )
+
+                    Image(
+                        bitmap =
+                            appIcon,
+                        contentDescription =
+                            app.label,
+                        modifier =
+                            Modifier.size(
+                                16.dp
+                            )
+                    )
+                }
+            }
+        }
     }
 }
