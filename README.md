@@ -3,7 +3,11 @@
 A keyboard-first, text-only Android home screen. Type what you want, press Enter, and it happens. Built for phones with a physical keyboard (developed on the Unihertz Titan 2) and happy on any Android 9+ phone.
 
 > **Status:** Beta 1.2. Expect rough edges. Bug reports are welcome; open an issue or type `bug` in the launcher.
+## Download
 
+**[⬇ Download the latest APK](https://github.com/fortaybro/PromptLauncher/releases/latest)**. Open the release and tap the `.apk` file under **Assets**.
+
+To install, allow your browser or file manager to "install unknown apps" when Android asks, then open the APK. After installing, set Prompt Launcher as your home app.
 ---
 
 ## What it does
