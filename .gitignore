@@ -16,7 +16,8 @@ local.properties
 
 # Build output and IDE state
 /app/build
-/release
+release/
+*.hprof
 *.apk
 *.aab
 .kotlin
