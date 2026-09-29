@@ -142,6 +142,13 @@ data class LauncherSettings(
      * way it did before the picker existed.
      */
     val showSearchTargetPicker: Boolean = true,
+    /*
+     * Which chips the search picker offers. With every one switched
+     * off the picker behaves as if it were off.
+     */
+    val searchChipChrome: Boolean = true,
+    val searchChipClaude: Boolean = true,
+    val searchChipApps: Boolean = true,
     val showProductivityDots: Boolean = true,
     val showCalendarCard: Boolean = true,
     val showAttentionCard: Boolean = true,

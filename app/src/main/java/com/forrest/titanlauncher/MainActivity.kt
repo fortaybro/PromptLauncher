@@ -333,6 +333,29 @@ mutableStateOf(
 )
 
 /*
+ * Search picker settings, read by the home prompt.
+ */
+internal var ShowSearchTargetPicker by
+mutableStateOf(
+    true
+)
+
+internal var SearchChipChrome by
+mutableStateOf(
+    true
+)
+
+internal var SearchChipClaude by
+mutableStateOf(
+    true
+)
+
+internal var SearchChipApps by
+mutableStateOf(
+    true
+)
+
+/*
  * Hours that have not happened yet. Supplied by the active palette so
  * pending dots stay distinct from PrimaryText in every theme.
  */
@@ -673,6 +696,10 @@ internal fun applyLauncherAppearance(
     ShowHomeProductivityDots = settings.showProductivityDots
     ShowHomeCalendarCard = settings.showCalendarCard
     ShowHomeAttentionCard = settings.showAttentionCard
+    ShowSearchTargetPicker = settings.showSearchTargetPicker
+    SearchChipChrome = settings.searchChipChrome
+    SearchChipClaude = settings.searchChipClaude
+    SearchChipApps = settings.searchChipApps
 
     ReadabilityFontScale =
         when (settings.readabilityTextSize) {

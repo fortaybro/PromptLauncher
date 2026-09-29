@@ -116,6 +116,9 @@ class LauncherSettingsStore(
             textColor = textColor,
             secondaryTextColor = secondaryTextColor,
             showSearchTargetPicker = showSearchTargetPicker,
+            searchChipChrome = preferences.getBoolean("search_chip_chrome", true),
+            searchChipClaude = preferences.getBoolean("search_chip_claude", true),
+            searchChipApps = preferences.getBoolean("search_chip_apps", true),
             interfaceFont = interfaceFont,
             appButtonSurface = appButtonSurface,
             infoCardSurface = infoCardSurface,
@@ -159,6 +162,9 @@ class LauncherSettingsStore(
             .putString("text_color", settings.textColor.name)
             .putString("secondary_text_color", settings.secondaryTextColor.name)
             .putBoolean("show_search_target_picker", settings.showSearchTargetPicker)
+            .putBoolean("search_chip_chrome", settings.searchChipChrome)
+            .putBoolean("search_chip_claude", settings.searchChipClaude)
+            .putBoolean("search_chip_apps", settings.searchChipApps)
             .putString("interface_font", settings.interfaceFont.name)
             .putString("app_button_surface", settings.appButtonSurface.name)
             .putString("info_card_surface", settings.infoCardSurface.name)

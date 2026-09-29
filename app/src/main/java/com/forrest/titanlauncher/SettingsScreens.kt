@@ -1965,17 +1965,67 @@ internal fun HomeScreenSettingsScreen(
 
             item {
                 SettingsControlCard {
-                    SettingsToggleRow(
-                        label = "search picker",
-                        enabled = settings.showSearchTargetPicker,
-                        onToggle = { enabled ->
-                            onSettingsChange(
-                                settings.copy(
-                                    showSearchTargetPicker = enabled
+                    Column {
+                        SettingsToggleRow(
+                            label = "search picker",
+                            enabled = settings.showSearchTargetPicker,
+                            onToggle = { enabled ->
+                                onSettingsChange(
+                                    settings.copy(
+                                        showSearchTargetPicker = enabled
+                                    )
                                 )
+                            }
+                        )
+
+                        /*
+                         * Pick which chips appear above the prompt.
+                         * Only shown while the picker is on.
+                         */
+                        if (
+                            settings.showSearchTargetPicker
+                        ) {
+                            Spacer(
+                                modifier = Modifier.height(4.dp)
+                            )
+
+                            SettingsToggleRow(
+                                label = "   chrome",
+                                enabled = settings.searchChipChrome,
+                                onToggle = { enabled ->
+                                    onSettingsChange(
+                                        settings.copy(
+                                            searchChipChrome = enabled
+                                        )
+                                    )
+                                }
+                            )
+
+                            SettingsToggleRow(
+                                label = "   claude",
+                                enabled = settings.searchChipClaude,
+                                onToggle = { enabled ->
+                                    onSettingsChange(
+                                        settings.copy(
+                                            searchChipClaude = enabled
+                                        )
+                                    )
+                                }
+                            )
+
+                            SettingsToggleRow(
+                                label = "   apps",
+                                enabled = settings.searchChipApps,
+                                onToggle = { enabled ->
+                                    onSettingsChange(
+                                        settings.copy(
+                                            searchChipApps = enabled
+                                        )
+                                    )
+                                }
                             )
                         }
-                    )
+                    }
                 }
             }
 

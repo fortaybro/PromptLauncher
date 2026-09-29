@@ -263,7 +263,7 @@ fun TitanHomeScreen(
     setStatusText: (String) -> Unit,
     commandOverlayOnly: Boolean = false,
     autoFocusCommandInput: Boolean = true,
-    showSearchTargetPicker: Boolean = true,
+    showSearchTargetPicker: Boolean = ShowSearchTargetPicker,
     onCommandOverlayActiveChange: (Boolean) -> Unit = {}
 ) {
 
@@ -1438,6 +1438,42 @@ fun TitanHomeScreen(
             )
             .apply()
     }
+
+    /*
+     * The search target actually in use. The saved choice wins when
+     * its chip is enabled in settings; otherwise the first enabled
+     * chip is used. With the picker off, or every chip disabled, plain
+     * text searches Chrome, as before the picker existed.
+     */
+    val enabledSearchTargets =
+        buildList {
+            if (SearchChipChrome) add("chrome")
+            if (SearchChipClaude) add("claude")
+            if (SearchChipApps) add("apps")
+        }
+
+    val searchPickerActive =
+        showSearchTargetPicker &&
+                enabledSearchTargets.isNotEmpty()
+
+    val savedSearchTarget =
+        when {
+            searchInApps -> "apps"
+            searchWithClaude -> "claude"
+            else -> "chrome"
+        }
+
+    val effectiveSearchTarget =
+        when {
+            !searchPickerActive ->
+                "chrome"
+
+            savedSearchTarget in enabledSearchTargets ->
+                savedSearchTarget
+
+            else ->
+                enabledSearchTargets.first()
+        }
 
     /*
      * Claude has no documented query intent, so the text is shared to
@@ -4089,8 +4125,7 @@ fun TitanHomeScreen(
              * where nothing matched.
              */
             if (
-                showSearchTargetPicker &&
-                searchInApps
+                effectiveSearchTarget == "apps"
             ) {
 
                 val bestApp =
@@ -4152,8 +4187,7 @@ fun TitanHomeScreen(
                 ""
 
             if (
-                showSearchTargetPicker &&
-                searchWithClaude
+                effectiveSearchTarget == "claude"
             ) {
                 openClaudeQuery(
                     raw
@@ -4329,8 +4363,7 @@ fun TitanHomeScreen(
      * the command legend. Symbol and word commands are left alone.
      */
     val appsModeActive =
-        showSearchTargetPicker &&
-                searchInApps &&
+        effectiveSearchTarget == "apps" &&
                 isPlainLauncherText(
                     commandText
                 )
@@ -5717,7 +5750,7 @@ fun TitanHomeScreen(
                 }
 
                 val looksLikeFreeText =
-                    showSearchTargetPicker &&
+                    searchPickerActive &&
                             commandText.isNotBlank() &&
                             commandText
                                 .trim()
@@ -5753,35 +5786,46 @@ fun TitanHomeScreen(
                             )
                     ) {
 
-                        SearchTargetChip(
-                            label = "chrome",
-                            selected =
-                                !searchInApps &&
-                                        !searchWithClaude,
-                            onClick = {
-                                setSearchInApps(false)
-                                setSearchWithClaude(false)
-                            }
-                        )
+                        if (
+                            "chrome" in enabledSearchTargets
+                        ) {
+                            SearchTargetChip(
+                                label = "chrome",
+                                selected =
+                                    effectiveSearchTarget == "chrome",
+                                onClick = {
+                                    setSearchInApps(false)
+                                    setSearchWithClaude(false)
+                                }
+                            )
+                        }
 
-                        SearchTargetChip(
-                            label = "claude",
-                            selected =
-                                !searchInApps &&
-                                        searchWithClaude,
-                            onClick = {
-                                setSearchInApps(false)
-                                setSearchWithClaude(true)
-                            }
-                        )
+                        if (
+                            "claude" in enabledSearchTargets
+                        ) {
+                            SearchTargetChip(
+                                label = "claude",
+                                selected =
+                                    effectiveSearchTarget == "claude",
+                                onClick = {
+                                    setSearchInApps(false)
+                                    setSearchWithClaude(true)
+                                }
+                            )
+                        }
 
-                        SearchTargetChip(
-                            label = "apps",
-                            selected = searchInApps,
-                            onClick = {
-                                setSearchInApps(true)
-                            }
-                        )
+                        if (
+                            "apps" in enabledSearchTargets
+                        ) {
+                            SearchTargetChip(
+                                label = "apps",
+                                selected =
+                                    effectiveSearchTarget == "apps",
+                                onClick = {
+                                    setSearchInApps(true)
+                                }
+                            )
+                        }
                     }
                 }
 
