@@ -863,6 +863,59 @@ internal fun HubScreen(
                     )
 
                 /*
+                 * When another app owns SMS, open the conversation
+                 * there. For a group, every participant except this
+                 * phone goes into the recipient list.
+                 */
+                val handedOff =
+                    if (
+                        item.isGroup
+                    ) {
+                        val ownNumber =
+                            OwnNumberStore(
+                                context
+                            )
+                                .get()
+                                ?.let {
+                                    normalizePhoneNumber(
+                                        it
+                                    )
+                                }
+
+                        val others =
+                            item.threadKey
+                                .split(",")
+                                .map {
+                                    it.trim()
+                                }
+                                .filter {
+                                    it.isNotBlank() &&
+                                            normalizePhoneNumber(
+                                                it
+                                            ) != ownNumber
+                                }
+
+                        others.isNotEmpty() &&
+                                openThreadInMessagingAppIfNotDefault(
+                                    context,
+                                    others.joinToString(
+                                        ";"
+                                    )
+                                )
+                    } else {
+                        openThreadInMessagingAppIfNotDefault(
+                            context,
+                            phoneNumber
+                        )
+                    }
+
+                if (
+                    handedOff
+                ) {
+                    return
+                }
+
+                /*
                  * A group carries its whole participant list through,
                  * so the conversation screen can show who said what
                  * and reply to everyone.
@@ -1592,14 +1645,26 @@ internal fun HubScreen(
                     callActionsItem =
                         null
 
-                    onOpenConversation(
-                        Contact(
-                            name =
-                                activeCallItem.title,
-                            phoneNumber =
-                                activeCallItem.phoneNumber
+                    /*
+                     * When another app owns SMS, reply in that app's
+                     * thread; Prompt's own thread is only used when
+                     * Prompt is the default SMS app.
+                     */
+                    if (
+                        !openThreadInMessagingAppIfNotDefault(
+                            context,
+                            activeCallItem.phoneNumber
                         )
-                    )
+                    ) {
+                        onOpenConversation(
+                            Contact(
+                                name =
+                                    activeCallItem.title,
+                                phoneNumber =
+                                    activeCallItem.phoneNumber
+                            )
+                        )
+                    }
                 },
                 onCall = {
 
@@ -3780,4 +3845,48 @@ fun MailComposeScreen(
             )
         }
     }
+}
+
+
+/*
+ * Opens the conversation with this number in the phone's default SMS
+ * app (Google Messages, Samsung Messages, ...) unless Prompt Launcher
+ * itself is the default. Returns true when it handed off, false when
+ * the caller should show Prompt's own thread instead.
+ */
+internal fun openThreadInMessagingAppIfNotDefault(
+    context: Context,
+    phoneNumber: String
+): Boolean {
+
+    val promptIsDefault =
+        runCatching {
+            com.forrest.titanlauncher.messages.SmsRoleManager(
+                context
+            ).isDefaultSmsApp()
+        }
+            .getOrDefault(
+                false
+            )
+
+    if (
+        promptIsDefault
+    ) {
+        return false
+    }
+
+    return runCatching {
+        context.startActivity(
+            Intent(
+                Intent.ACTION_SENDTO,
+                Uri.parse(
+                    "smsto:" + phoneNumber
+                )
+            )
+        )
+        true
+    }
+        .getOrDefault(
+            false
+        )
 }

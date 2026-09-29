@@ -1617,6 +1617,15 @@ fun TitanApp(
         )
     }
 
+    /*
+     * Set when a text typed in the prompt ("@name message") should
+     * also open the conversation in the phone's messaging app once
+     * it has been sent.
+     */
+    var pendingSmsOpenMessagesAfter by remember {
+        mutableStateOf(false)
+    }
+
     var pendingCalendarEvent by remember {
         mutableStateOf<CalendarEventDraft?>(
             null
@@ -2656,9 +2665,34 @@ fun TitanApp(
         }
     }
 
+    /*
+     * Opens the conversation with this number in whichever app is the
+     * default for SMS (Google Messages, Samsung Messages, ...).
+     */
+    fun openThreadInDefaultMessagesApp(
+        phoneNumber: String
+    ) {
+
+        runCatching {
+            context.startActivity(
+                Intent(
+                    Intent.ACTION_SENDTO,
+                    Uri.parse(
+                        "smsto:" + phoneNumber
+                    )
+                )
+            )
+        }
+            .onFailure {
+                statusText =
+                    "SENT, BUT COULD NOT OPEN MESSAGES"
+            }
+    }
+
     fun actuallySendSms(
         contact: Contact,
-        message: String
+        message: String,
+        openMessagesAfter: Boolean = false
     ) {
 
         smsSender.sendSms(
@@ -2675,6 +2709,19 @@ fun TitanApp(
                 statusText =
                     "SMS FAILED: $result"
             }
+        }
+
+        /*
+         * The send is already queued, and Android records a text sent
+         * this way in the phone's message history, so the messaging
+         * app shows it in the thread.
+         */
+        if (
+            openMessagesAfter
+        ) {
+            openThreadInDefaultMessagesApp(
+                contact.phoneNumber
+            )
         }
     }
 
@@ -2704,7 +2751,9 @@ fun TitanApp(
 
                     actuallySendSms(
                         contact,
-                        message
+                        message,
+                        openMessagesAfter =
+                            pendingSmsOpenMessagesAfter
                     )
                 }
 
@@ -2719,6 +2768,9 @@ fun TitanApp(
 
             pendingSmsMessage =
                 null
+
+            pendingSmsOpenMessagesAfter =
+                false
         }
 
     val smsRoleLauncher =
@@ -2778,7 +2830,8 @@ fun TitanApp(
 
     fun sendMessage(
         contact: Contact,
-        message: String
+        message: String,
+        openMessagesAfter: Boolean = false
     ) {
 
         if (
@@ -2791,6 +2844,9 @@ fun TitanApp(
             pendingSmsMessage =
                 message
 
+            pendingSmsOpenMessagesAfter =
+                openMessagesAfter
+
             smsPermissionLauncher.launch(
                 Manifest.permission.SEND_SMS
             )
@@ -2800,7 +2856,9 @@ fun TitanApp(
 
         actuallySendSms(
             contact,
-            message
+            message,
+            openMessagesAfter =
+                openMessagesAfter
         )
     }
 
@@ -3258,6 +3316,16 @@ fun TitanApp(
                 sendMessage(
                     contact,
                     message
+                )
+            },
+            onSendMessageAndOpenMessages = {
+                    contact,
+                    message ->
+
+                sendMessage(
+                    contact,
+                    message,
+                    openMessagesAfter = true
                 )
             },
             onOpenGroupThread = {

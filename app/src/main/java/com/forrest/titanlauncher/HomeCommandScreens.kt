@@ -170,6 +170,8 @@ import com.forrest.titanlauncher.commands.CommandParser
 import com.forrest.titanlauncher.contacts.Contact
 import com.forrest.titanlauncher.contacts.ContactRepository
 import com.forrest.titanlauncher.contacts.EmailContact
+import com.forrest.titanlauncher.messages.MmsSender
+import com.forrest.titanlauncher.messages.threadKeyFor
 import com.forrest.titanlauncher.messages.SmsDatabase
 import com.forrest.titanlauncher.messages.SmsMessage
 import com.forrest.titanlauncher.messages.SmsRoleManager
@@ -256,6 +258,15 @@ fun TitanHomeScreen(
         Contact,
         String
     ) -> Unit,
+    /*
+     * "@name message" typed in the prompt while another app owns SMS:
+     * send the text, then open that conversation in the messaging
+     * app. Defaults to a plain send.
+     */
+    onSendMessageAndOpenMessages: (
+        Contact,
+        String
+    ) -> Unit = onSendMessage,
     onOpenHub: () -> Unit,
     upcomingEvent: UpcomingCalendarEvent?,
     calendarAgendaEvents: List<UpcomingCalendarEvent>,
@@ -922,6 +933,27 @@ fun TitanHomeScreen(
         return true
     }
 
+    /*
+     * Tapping a name in the "@" suggestions locks that exact contact
+     * (and number). The prompt then holds only the message: the ">"
+     * becomes a red "@" and the line above reads "message → name".
+     * Enter sends to that contact; backspace on an empty prompt, or
+     * back, unlocks it.
+     */
+    var lockedTextContact by remember {
+        mutableStateOf<Contact?>(
+            null
+        )
+    }
+
+    /*
+     * The prompt counts as open while a contact is locked, even before
+     * any message text is typed.
+     */
+    val promptOpen =
+        commandText.isNotBlank() ||
+                lockedTextContact != null
+
     fun performResolvedContactCommand(
         command: Command,
         contact: Contact
@@ -931,12 +963,28 @@ fun TitanHomeScreen(
 
             is Command.SendMessage -> {
 
+                val promptIsDefaultSms =
+                    runCatching {
+                        smsRoleManager.isDefaultSmsApp()
+                    }
+                        .getOrDefault(
+                            true
+                        )
+
                 if (
-                    !handOffMessagingIfNotDefault(
-                        contact.phoneNumber
-                    )
+                    promptIsDefaultSms
                 ) {
                     onSendMessage(
+                        contact,
+                        command.message
+                    )
+                } else {
+                    /*
+                     * Another app owns SMS: send the text directly,
+                     * then open the thread in that app so the sent
+                     * message is on screen.
+                     */
+                    onSendMessageAndOpenMessages(
                         contact,
                         command.message
                     )
@@ -2245,9 +2293,10 @@ fun TitanHomeScreen(
     }
 
     val isGroupCompose =
-        commandText
-            .trimStart()
-            .startsWith("@@")
+        lockedTextContact == null &&
+                commandText
+                    .trimStart()
+                    .startsWith("@@")
 
     val groupComposeQuery =
         if (
@@ -2282,7 +2331,15 @@ fun TitanHomeScreen(
 
             if (
                 !hasContactsPermission ||
-                groupComposeQuery.isBlank()
+                groupComposeQuery.isBlank() ||
+                /*
+                 * Once someone is picked, text with a space is the
+                 * message, not another name to look up.
+                 */
+                (
+                        groupRecipients.isNotEmpty() &&
+                                groupComposeQuery.contains(' ')
+                        )
             ) {
 
                 emptyList()
@@ -2298,6 +2355,24 @@ fun TitanHomeScreen(
                     .getOrDefault(
                         emptyList()
                     )
+                    .filter { candidate ->
+
+                        val query =
+                            groupComposeQuery.trim()
+
+                        candidate.name.startsWith(
+                            query,
+                            ignoreCase = true
+                        ) ||
+                                candidate.name
+                                    .split(' ')
+                                    .any {
+                                        it.startsWith(
+                                            query,
+                                            ignoreCase = true
+                                        )
+                                    }
+                    }
                     .filter { candidate ->
 
                         groupRecipients.none {
@@ -2338,9 +2413,182 @@ fun TitanHomeScreen(
             "@@"
     }
 
+    /*
+     * Opens a conversation with these numbers in the phone's messaging
+     * app, optionally with a message typed in but not sent.
+     */
+    fun openMessagesAppThread(
+        numbers: List<String>,
+        prefilledBody: String? = null
+    ) {
+
+        runCatching {
+            context.startActivity(
+                Intent(
+                    Intent.ACTION_SENDTO,
+                    Uri.parse(
+                        "smsto:" +
+                                numbers.joinToString(
+                                    ";"
+                                )
+                    )
+                ).apply {
+                    if (
+                        !prefilledBody.isNullOrBlank()
+                    ) {
+                        putExtra(
+                            "sms_body",
+                            prefilledBody
+                        )
+                    }
+                }
+            )
+        }
+            .onFailure {
+                setStatusText(
+                    "COULD NOT OPEN MESSAGES"
+                )
+            }
+    }
+
     fun openGroupThread(
         draft: String = ""
     ) {
+
+        val promptIsDefaultSms =
+            runCatching {
+                smsRoleManager.isDefaultSmsApp()
+            }
+                .getOrDefault(
+                    true
+                )
+
+        /*
+         * Another app owns SMS: the group lives there. Enter with no
+         * message opens the group in that app; with a message, the
+         * message is sent and the group opens showing it.
+         */
+        if (
+            !promptIsDefaultSms
+        ) {
+
+            val recipients =
+                groupRecipients
+
+            if (
+                recipients.isEmpty()
+            ) {
+
+                setStatusText(
+                    "PICK SOMEONE FIRST"
+                )
+
+                return
+            }
+
+            val numbers =
+                recipients.map {
+                    it.phoneNumber
+                }
+
+            val message =
+                draft.trim()
+
+            val canSend =
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.SEND_SMS
+                ) ==
+                        PackageManager.PERMISSION_GRANTED
+
+            when {
+                message.isBlank() ->
+                    openMessagesAppThread(
+                        numbers
+                    )
+
+                recipients.size == 1 ->
+                    onSendMessageAndOpenMessages(
+                        recipients.first(),
+                        message
+                    )
+
+                !canSend -> {
+                    /*
+                     * No SMS permission yet: hand the message over
+                     * typed in, one tap from sent.
+                     */
+                    openMessagesAppThread(
+                        numbers,
+                        prefilledBody =
+                            message
+                    )
+
+                    setStatusText(
+                        "ALLOW SMS TO SEND GROUP TEXTS DIRECTLY"
+                    )
+                }
+
+                else -> {
+
+                    val ownNumber =
+                        OwnNumberStore(
+                            context
+                        )
+                            .get()
+
+                    val participants =
+                        numbers +
+                                listOfNotNull(
+                                    ownNumber
+                                )
+
+                    val sent =
+                        MmsSender.send(
+                            context =
+                                context,
+                            recipients =
+                                participants,
+                            body =
+                                message,
+                            threadKey =
+                                threadKeyFor(
+                                    participants
+                                )
+                        )
+
+                    if (
+                        sent
+                    ) {
+                        openMessagesAppThread(
+                            numbers
+                        )
+                    } else {
+                        /*
+                         * The MMS could not be queued; fall back to
+                         * handing it over typed in.
+                         */
+                        openMessagesAppThread(
+                            numbers,
+                            prefilledBody =
+                                message
+                        )
+
+                        setStatusText(
+                            "GROUP TEXT NOT SENT, TAP SEND IN MESSAGES"
+                        )
+                    }
+                }
+            }
+
+            groupRecipients =
+                emptyList()
+
+            commandText =
+                ""
+
+            return
+        }
 
         if (
             groupRecipients.size < 2
@@ -2393,6 +2641,48 @@ fun TitanHomeScreen(
 
         val raw =
             commandText.trim()
+
+        /*
+         * A contact locked in by tapping it: everything after the name
+         * is the message. No message just opens the conversation.
+         */
+        val lockedContact =
+            lockedTextContact
+
+        if (
+            lockedContact != null
+        ) {
+
+            val message =
+                raw
+
+            lockedTextContact =
+                null
+
+            performResolvedContactCommand(
+                if (
+                    message.isBlank()
+                ) {
+                    Command.OpenConversation(
+                        contactName =
+                            lockedContact.name
+                    )
+                } else {
+                    Command.SendMessage(
+                        contactName =
+                            lockedContact.name,
+                        message =
+                            message
+                    )
+                },
+                lockedContact
+            )
+
+            commandText =
+                ""
+
+            return
+        }
 
         /*
          * In group compose, Enter means one of two things. While a
@@ -4290,6 +4580,7 @@ fun TitanHomeScreen(
             .let { trimmed ->
 
                 if (
+                    lockedTextContact == null &&
                     trimmed.startsWith(".")
                 ) {
                     trimmed
@@ -4363,7 +4654,8 @@ fun TitanHomeScreen(
      * the command legend. Symbol and word commands are left alone.
      */
     val appsModeActive =
-        effectiveSearchTarget == "apps" &&
+        lockedTextContact == null &&
+                effectiveSearchTarget == "apps" &&
                 isPlainLauncherText(
                     commandText
                 )
@@ -4471,9 +4763,11 @@ fun TitanHomeScreen(
     val inlineContactMatches =
         remember(
             inlineContactQuery,
-            hasContactsPermission
+            hasContactsPermission,
+            lockedTextContact
         ) {
             if (
+                lockedTextContact == null &&
                 hasContactsPermission &&
                 inlineContactQuery.isNotBlank()
             ) {
@@ -4694,6 +4988,7 @@ fun TitanHomeScreen(
 
     LaunchedEffect(
         commandText,
+        lockedTextContact,
         showAppSearch,
         showCommandHelp,
         showCalendarSetup,
@@ -4710,7 +5005,7 @@ fun TitanHomeScreen(
         ) {
 
             onCommandOverlayActiveChange(
-                commandText.isNotBlank() ||
+                promptOpen ||
                         showAppSearch ||
                         showCommandHelp ||
                         showCalendarSetup ||
@@ -4763,7 +5058,7 @@ fun TitanHomeScreen(
 
     val commandFocusBlurTarget =
         if (
-            commandText.isNotBlank() &&
+            promptOpen &&
             !showCommandHelp &&
             !showAppSearch &&
             !showCalendarSetup
@@ -4794,7 +5089,7 @@ fun TitanHomeScreen(
 
     val commandFocusDimTarget =
         if (
-            commandText.isNotBlank() &&
+            promptOpen &&
             !showCommandHelp &&
             !showAppSearch &&
             !showCalendarSetup
@@ -5479,7 +5774,7 @@ fun TitanHomeScreen(
         }
 
         val commandPromptActive =
-            commandText.isNotBlank() &&
+            promptOpen &&
                     !showCommandHelp &&
                     !showAppSearch &&
                     !showCalendarSetup
@@ -5607,7 +5902,7 @@ fun TitanHomeScreen(
             }
 
             if (
-                commandText.isNotBlank()
+                promptOpen
             ) {
 
                 /*
@@ -5616,6 +5911,7 @@ fun TitanHomeScreen(
                  * below are what the user is looking at.
                  */
                 if (
+                    lockedTextContact == null &&
                     recentWebSearches.isNotEmpty() &&
                     inlineContactQuery.isBlank() &&
                     groupComposeQuery.isBlank()
@@ -5670,6 +5966,7 @@ fun TitanHomeScreen(
                  * legend just pushes it off screen.
                  */
                 if (
+                    lockedTextContact == null &&
                     inlineContactQuery.isBlank() &&
                     groupComposeQuery.isBlank()
                 ) {
@@ -5750,7 +6047,8 @@ fun TitanHomeScreen(
                 }
 
                 val looksLikeFreeText =
-                    searchPickerActive &&
+                    lockedTextContact == null &&
+                            searchPickerActive &&
                             commandText.isNotBlank() &&
                             commandText
                                 .trim()
@@ -5831,7 +6129,13 @@ fun TitanHomeScreen(
 
                 CommandContextPanel(
                     commandText =
-                        commandText,
+                        if (
+                            lockedTextContact != null
+                        ) {
+                            "@"
+                        } else {
+                            commandText
+                        },
                     groupRecipients =
                         groupRecipients.map {
                             it.name
@@ -5848,7 +6152,8 @@ fun TitanHomeScreen(
                         )
                     },
                     contactQuery =
-                        inlineContactQuery,
+                        lockedTextContact?.name
+                            ?: inlineContactQuery,
                     contacts =
                         inlineContactMatches,
                     selectedContactIndex =
@@ -5856,9 +6161,46 @@ fun TitanHomeScreen(
                     onChooseContact = {
                             contact ->
 
-                        chooseInlineContact(
-                            contact
-                        )
+                        val typed =
+                            commandText.trimStart()
+
+                        if (
+                            typed.startsWith("@") &&
+                            !typed.startsWith("@@")
+                        ) {
+
+                            /*
+                             * Tap locks the contact in; keep anything
+                             * already typed as the start of the
+                             * message.
+                             */
+                            val typedMessage =
+                                (inlineContactCommand as? Command.SendMessage)
+                                    ?.message
+                                    .orEmpty()
+
+                            lockedTextContact =
+                                contact
+
+                            commandText =
+                                typedMessage
+
+                            scope.launch {
+
+                                delay(
+                                    20
+                                )
+
+                                focusRequester
+                                    .requestFocus()
+                            }
+
+                        } else {
+
+                            chooseInlineContact(
+                                contact
+                            )
+                        }
                     },
                     apps =
                         inlineAppMatches,
@@ -6014,8 +6356,29 @@ fun TitanHomeScreen(
                     }
                 },
                 visible =
-                    commandText.isNotBlank()
+                    promptOpen,
+                lockedToContact =
+                    lockedTextContact != null,
+                onBackspaceWhenEmpty = {
+                    lockedTextContact =
+                        null
+                }
             )
+        }
+
+        /*
+         * Back while a contact is locked drops the contact and the
+         * message rather than leaving home.
+         */
+        BackHandler(
+            enabled =
+                lockedTextContact != null
+        ) {
+            lockedTextContact =
+                null
+
+            commandText =
+                ""
         }
 
         if (
@@ -10514,7 +10877,9 @@ fun CommandBar(
     hasInlineSuggestions: Boolean,
     onNavigateInlineSuggestion: (Int) -> Unit,
     onChooseInlineSuggestion: () -> Unit,
-    visible: Boolean
+    visible: Boolean,
+    lockedToContact: Boolean = false,
+    onBackspaceWhenEmpty: () -> Unit = {}
 ) {
 
     var commandFieldValue by
@@ -10704,11 +11069,27 @@ fun CommandBar(
                     contentAlignment =
                         Alignment.Center
                 ) {
+                    /*
+                     * A locked contact swaps ">" for a red "@" in the
+                     * same spot: the prompt now takes a message.
+                     */
                     Text(
                         text =
-                            ">",
+                            if (
+                                lockedToContact
+                            ) {
+                                "@"
+                            } else {
+                                ">"
+                            },
                         color =
-                            PrimaryText,
+                            if (
+                                lockedToContact
+                            ) {
+                                LauncherCommandRed
+                            } else {
+                                PrimaryText
+                            },
                         fontSize =
                             22.sp,
                         fontFamily =
@@ -10814,6 +11195,23 @@ fun CommandBar(
                                     when (
                                         event.key
                                     ) {
+                                        /*
+                                         * Backspace on an empty prompt
+                                         * with a contact locked drops
+                                         * the contact.
+                                         */
+                                        Key.Backspace -> {
+                                            if (
+                                                lockedToContact &&
+                                                commandFieldValue.text.isEmpty()
+                                            ) {
+                                                onBackspaceWhenEmpty()
+                                                true
+                                            } else {
+                                                false
+                                            }
+                                        }
+
                                         Key.DirectionDown -> {
                                             if (
                                                 hasInlineSuggestions

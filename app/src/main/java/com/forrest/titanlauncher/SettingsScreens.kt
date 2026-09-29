@@ -1986,7 +1986,7 @@ internal fun HomeScreenSettingsScreen(
                             settings.showSearchTargetPicker
                         ) {
                             Spacer(
-                                modifier = Modifier.height(4.dp)
+                                modifier = Modifier.height(6.dp)
                             )
 
                             SettingsToggleRow(
@@ -2001,6 +2001,10 @@ internal fun HomeScreenSettingsScreen(
                                 }
                             )
 
+                            Spacer(
+                                modifier = Modifier.height(6.dp)
+                            )
+
                             SettingsToggleRow(
                                 label = "   claude",
                                 enabled = settings.searchChipClaude,
@@ -2011,6 +2015,10 @@ internal fun HomeScreenSettingsScreen(
                                         )
                                     )
                                 }
+                            )
+
+                            Spacer(
+                                modifier = Modifier.height(6.dp)
                             )
 
                             SettingsToggleRow(
