@@ -1,0 +1,30 @@
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Build output and IDE state
+/app/build
+/release
+*.apk
+*.aab
+.kotlin
+.idea
+
+# Signing keys and secrets: never commit these
+*.jks
+*.keystore
+*.p12
+keystore.properties
+google-services.json

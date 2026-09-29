@@ -1,0 +1,31 @@
+Prompt Launcher
+Copyright 2026 Forrest Brown
+
+This product is licensed under the Apache License, Version 2.0.
+See the LICENSE file for the full text.
+
+------------------------------------------------------------------------
+
+This product includes ideas and code derived from MinkLauncher OpenSource
+(https://github.com/katoaapps/openminilaunch), licensed under the Apache
+License, Version 2.0. The original code has been modified. Its NOTICE
+reads, in the parts that apply to this product:
+
+    MinkLauncher OpenSource
+    Copyright 2026 Katoa Apps
+
+    This product is licensed under the Apache License, Version 2.0.
+    The MinkLauncher name and branding are not granted for unrestricted
+    trademark use.
+
+Prompt Launcher is not affiliated with or endorsed by Katoa Apps.
+
+------------------------------------------------------------------------
+
+This product bundles the Poppins font (app/src/main/res/font/),
+Copyright 2020 The Poppins Project Authors
+(https://github.com/itfoundry/Poppins), licensed under the SIL Open Font
+License, Version 1.1 (https://openfontlicense.org).
+
+Weather data is provided by Open-Meteo (https://open-meteo.com) under
+the Creative Commons Attribution 4.0 license (CC BY 4.0).
