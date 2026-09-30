@@ -1,5 +1,6 @@
 package com.forrest.titanlauncher.notifications
 
+import com.forrest.titanlauncher.mail.allMailPackages
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.RemoteInput
@@ -83,7 +84,6 @@ object NotificationCenter {
      */
     private val existingPromptLauncherSources =
         setOf(
-            "com.google.android.gm",
             "com.google.android.dialer",
             "com.android.dialer",
             "com.google.android.apps.messaging",
@@ -119,6 +119,46 @@ object NotificationCenter {
      * Mail and the dialers are deliberately not treated this way;
      * they are separate questions with their own answers.
      */
+    /*
+     * Installed email apps, refreshed every ten minutes so a newly
+     * installed one is picked up without a restart.
+     */
+    private var cachedMailPackages: Set<String> =
+        emptySet()
+
+    private var cachedMailPackagesAt =
+        0L
+
+    private fun isMailPackage(
+        context: Context,
+        packageName: String
+    ): Boolean {
+
+        val now =
+            System.currentTimeMillis()
+
+        if (
+            now - cachedMailPackagesAt >
+            10L * 60L * 1000L
+        ) {
+            cachedMailPackages =
+                runCatching {
+                    allMailPackages(
+                        context
+                    )
+                }
+                    .getOrDefault(
+                        cachedMailPackages
+                    )
+
+            cachedMailPackagesAt =
+                now
+        }
+
+        return packageName in
+                cachedMailPackages
+    }
+
     private val messagingSources =
         setOf(
             "com.google.android.apps.messaging",
@@ -384,8 +424,20 @@ object NotificationCenter {
             packageName in
                     messagingSources
 
+        /*
+         * Email is treated the same way as texts: the email app's
+         * notification stays in the shade, so opening it there or
+         * in the app keeps read state in step.
+         */
+        val ownsMail =
+            isMailPackage(
+                service,
+                packageName
+            )
+
         if (
-            !ownsMessaging
+            !ownsMessaging &&
+            !ownsMail
         ) {
 
             runCatching {

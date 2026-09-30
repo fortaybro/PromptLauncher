@@ -119,6 +119,12 @@ class LauncherSettingsStore(
             searchChipChrome = preferences.getBoolean("search_chip_chrome", true),
             searchChipClaude = preferences.getBoolean("search_chip_claude", true),
             searchChipApps = preferences.getBoolean("search_chip_apps", true),
+            mailComposeApp = preferences.getString("mail_compose_app", "").orEmpty(),
+            mailApps = preferences.getString("mail_apps", "")
+                .orEmpty()
+                .split(",")
+                .map { it.trim() }
+                .filter { it.isNotBlank() },
             interfaceFont = interfaceFont,
             appButtonSurface = appButtonSurface,
             infoCardSurface = infoCardSurface,
@@ -165,6 +171,8 @@ class LauncherSettingsStore(
             .putBoolean("search_chip_chrome", settings.searchChipChrome)
             .putBoolean("search_chip_claude", settings.searchChipClaude)
             .putBoolean("search_chip_apps", settings.searchChipApps)
+            .putString("mail_compose_app", settings.mailComposeApp)
+            .putString("mail_apps", settings.mailApps.joinToString(","))
             .putString("interface_font", settings.interfaceFont.name)
             .putString("app_button_surface", settings.appButtonSurface.name)
             .putString("info_card_surface", settings.infoCardSurface.name)

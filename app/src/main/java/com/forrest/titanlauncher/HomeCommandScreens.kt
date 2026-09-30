@@ -153,6 +153,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.forrest.titanlauncher.ai.GeminiApiKeyStore
 import com.forrest.titanlauncher.ai.GeminiRepository
+import com.forrest.titanlauncher.mail.allMailPackages
 import com.forrest.titanlauncher.ai.AssistantSharingStore
 import com.forrest.titanlauncher.ai.buildAssistantLauncherContext
 import com.forrest.titanlauncher.calendar.CalendarCommandParser
@@ -834,6 +835,59 @@ fun TitanHomeScreen(
 
             it.important &&
                     it.unread
+        }
+
+    /*
+     * New mail from the email apps' own notifications (Gmail, Spark,
+     * Samsung Email, Outlook, ...), the same way texts from another
+     * messaging app are counted.
+     */
+    val newMailNotifications =
+        remember(
+            quickReplyNotifications,
+            EnabledMailApps
+        ) {
+            val mailPackages =
+                if (
+                    EnabledMailApps.isNotEmpty()
+                ) {
+                    EnabledMailApps.toSet()
+                } else {
+                    allMailPackages(
+                        context
+                    )
+                }
+
+            quickReplyNotifications
+                .filter {
+                    it.packageName in mailPackages &&
+                            it.messages.isEmpty()
+                }
+                .sortedByDescending {
+                    it.timestamp
+                }
+        }
+
+    /*
+     * Gmail's important-unread count when Gmail is connected,
+     * otherwise the number of new-mail notifications.
+     */
+    val homeMailCount =
+        if (
+            importantUnreadMailCount > 0
+        ) {
+            importantUnreadMailCount
+        } else {
+            newMailNotifications.size
+        }
+
+    val homeMailWord =
+        if (
+            importantUnreadMailCount > 0
+        ) {
+            "important"
+        } else {
+            "new"
         }
 
     var inlineContactSelectionIndex by remember {
@@ -4570,26 +4624,12 @@ fun TitanHomeScreen(
             .trim()
 
     /*
-     * "." alone opens the app list. "." followed by text narrows it
-     * inline, the same way "@" narrows contacts, so a known app is
-     * two keystrokes and enter rather than a trip through the picker.
+     * "." used to narrow the app list inline. Apps are now searched
+     * with the apps chip, so "." only opens the full list on enter and
+     * nothing else is matched here.
      */
     val inlineAppQuery =
-        commandText
-            .trim()
-            .let { trimmed ->
-
-                if (
-                    lockedTextContact == null &&
-                    trimmed.startsWith(".")
-                ) {
-                    trimmed
-                        .removePrefix(".")
-                        .trim()
-                } else {
-                    ""
-                }
-            }
+        ""
 
     val inlineAppMatches =
         remember(
@@ -5496,8 +5536,8 @@ fun TitanHomeScreen(
                                 when {
 
                                     unreadCount > 0 &&
-                                            importantUnreadMailCount > 0 ->
-                                        "$unreadCount texts · $importantUnreadMailCount important mail"
+                                            homeMailCount > 0 ->
+                                        "$unreadCount texts · $homeMailCount $homeMailWord mail"
 
                                     unreadCount == 1 ->
                                         "1 unread message"
@@ -5505,11 +5545,11 @@ fun TitanHomeScreen(
                                     unreadCount > 1 ->
                                         "$unreadCount unread messages"
 
-                                    importantUnreadMailCount == 1 ->
-                                        "1 important email"
+                                    homeMailCount == 1 ->
+                                        "1 $homeMailWord email"
 
-                                    importantUnreadMailCount > 1 ->
-                                        "$importantUnreadMailCount important emails"
+                                    homeMailCount > 1 ->
+                                        "$homeMailCount $homeMailWord emails"
 
                                     else ->
                                         "messages"
@@ -5524,6 +5564,25 @@ fun TitanHomeScreen(
 
                                     importantUnreadMail != null ->
                                         "${importantUnreadMail.sender}: ${importantUnreadMail.subject}"
+                                            .take(
+                                                44
+                                            )
+
+                                    newMailNotifications.isNotEmpty() ->
+                                        newMailNotifications
+                                            .first()
+                                            .let {
+                                                listOf(
+                                                    it.title,
+                                                    it.text
+                                                )
+                                                    .filter { part ->
+                                                        part.isNotBlank()
+                                                    }
+                                                    .joinToString(
+                                                        ": "
+                                                    )
+                                            }
                                             .take(
                                                 44
                                             )
@@ -5548,11 +5607,11 @@ fun TitanHomeScreen(
                             badge =
                                 if (
                                     unreadCount +
-                                    importantUnreadMailCount > 0
+                                    homeMailCount > 0
                                 ) {
                                     (
                                             unreadCount +
-                                                    importantUnreadMailCount
+                                                    homeMailCount
                                             )
                                         .toString()
                                 } else {
@@ -5571,6 +5630,24 @@ fun TitanHomeScreen(
                                 ) {
 
                                     onOpenMail()
+
+                                } else if (
+                                    newMailNotifications.isNotEmpty()
+                                ) {
+
+                                    /*
+                                     * Opens that exact email in its
+                                     * app, like tapping it in the hub.
+                                     */
+                                    NotificationCenter
+                                        .openNotification(
+                                            key =
+                                                newMailNotifications
+                                                    .first()
+                                                    .key,
+                                            context =
+                                                context
+                                        )
 
                                 } else {
 
@@ -9083,7 +9160,7 @@ internal fun launcherCommandContext(
 
         raw.startsWith(".") ->
             LauncherCommandContextText(
-                action = "press enter or type the app name"
+                action = "press enter for all apps"
             )
 
         raw.equals(
@@ -11120,6 +11197,25 @@ fun CommandBar(
                     sanitizeLauncherCommandInput(
                         incoming.text
                     )
+                        ?.let { cleaned ->
+
+                            /*
+                             * "." is only the app-list command now
+                             * (apps are searched with the apps chip):
+                             * nothing can be typed after it. Enter
+                             * opens the list, backspace closes the
+                             * prompt. A locked contact's message is
+                             * left alone.
+                             */
+                            if (
+                                !lockedToContact &&
+                                cleaned.trimStart().startsWith(".")
+                            ) {
+                                "."
+                            } else {
+                                cleaned
+                            }
+                        }
                         ?.let { accepted ->
 
                             commandFieldValue =

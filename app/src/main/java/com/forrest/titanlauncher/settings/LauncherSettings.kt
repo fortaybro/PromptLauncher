@@ -149,6 +149,17 @@ data class LauncherSettings(
     val searchChipChrome: Boolean = true,
     val searchChipClaude: Boolean = true,
     val searchChipApps: Boolean = true,
+    /*
+     * Package of the mail app new emails are written in. Blank means
+     * Prompt Launcher's own Gmail compose.
+     */
+    val mailComposeApp: String = "",
+    /*
+     * Email apps picked in onboarding or settings, in order. Their
+     * notifications fill the hub's email tab and the first one opens
+     * for "mail". Empty means every installed email app.
+     */
+    val mailApps: List<String> = emptyList(),
     val showProductivityDots: Boolean = true,
     val showCalendarCard: Boolean = true,
     val showAttentionCard: Boolean = true,

@@ -160,6 +160,8 @@ import com.forrest.titanlauncher.contacts.ContactRepository
 import com.forrest.titanlauncher.contacts.EmailContact
 import com.forrest.titanlauncher.messages.SmsDatabase
 import com.forrest.titanlauncher.messages.threadKeyFor
+import com.forrest.titanlauncher.mail.composeInMailApp
+import com.forrest.titanlauncher.mail.openMailApp
 import com.forrest.titanlauncher.messages.SmsMessage
 import com.forrest.titanlauncher.messages.SmsHistoryImporter
 import com.forrest.titanlauncher.messages.SmsRoleManager
@@ -353,6 +355,23 @@ mutableStateOf(
 internal var SearchChipApps by
 mutableStateOf(
     true
+)
+
+/*
+ * Mail app new emails are written in. Blank means Prompt Launcher's
+ * own Gmail compose.
+ */
+internal var MailComposeAppPackage by
+mutableStateOf(
+    ""
+)
+
+/*
+ * Email apps chosen by the user, in order. Empty means all of them.
+ */
+internal var EnabledMailApps by
+mutableStateOf(
+    emptyList<String>()
 )
 
 /*
@@ -700,6 +719,8 @@ internal fun applyLauncherAppearance(
     SearchChipChrome = settings.searchChipChrome
     SearchChipClaude = settings.searchChipClaude
     SearchChipApps = settings.searchChipApps
+    MailComposeAppPackage = settings.mailComposeApp
+    EnabledMailApps = settings.mailApps
 
     ReadabilityFontScale =
         when (settings.readabilityTextSize) {
@@ -3260,15 +3281,43 @@ fun TitanApp(
                 mailMessages,
             onOpenMail = {
 
-                requestMailAuthorization(
-                    openInbox =
-                        true,
-                    allowConsent =
-                        true
-                )
+                /*
+                 * Email works like texting: it opens in the user's
+                 * email app, not inside Prompt Launcher.
+                 */
+                if (
+                    !openMailApp(
+                        context,
+                        EnabledMailApps
+                    )
+                ) {
+                    statusText =
+                        "NO EMAIL APP FOUND"
+                }
             },
             onComposeMail = {
                     emailContact ->
+
+                /*
+                 * A mail app chosen in settings writes the email
+                 * there instead of in Prompt Launcher.
+                 */
+                if (
+                    MailComposeAppPackage.isNotBlank()
+                ) {
+                    if (
+                        !composeInMailApp(
+                            context,
+                            MailComposeAppPackage,
+                            emailContact.emailAddress
+                        )
+                    ) {
+                        statusText =
+                            "NO MAIL APP FOUND"
+                    }
+
+                    return@TitanHomeScreen
+                }
 
                 currentConversation =
                     null
@@ -4788,6 +4837,20 @@ fun TitanApp(
                                 },
                                 onOpenMail = {
                                         message ->
+
+                                    /*
+                                     * Hand off to the email app, like
+                                     * texts; the in-app mail viewer is
+                                     * no longer used.
+                                     */
+                                    if (
+                                        openMailApp(
+                                            context,
+                                            EnabledMailApps
+                                        )
+                                    ) {
+                                        return@HubScreen
+                                    }
 
                                     returnToHubAfterMail =
                                         true

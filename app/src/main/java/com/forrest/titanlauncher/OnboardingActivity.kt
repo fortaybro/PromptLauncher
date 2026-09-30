@@ -75,6 +75,7 @@ import com.forrest.titanlauncher.messages.SmsRoleManager
 import com.forrest.titanlauncher.todoist.GoogleTasksAuthManager
 import com.forrest.titanlauncher.todoist.TaskProvider
 import com.forrest.titanlauncher.usage.UsageStatsRepository
+import com.forrest.titanlauncher.mail.findEmailProviders
 import com.forrest.titanlauncher.todoist.TodoistTokenStore
 import com.forrest.titanlauncher.ui.theme.TitanLauncherTheme
 import com.forrest.titanlauncher.weather.WeatherRepository
@@ -156,7 +157,7 @@ class OnboardingActivity : ComponentActivity() {
             )
             .coerceIn(
                 0,
-                6
+                7
             )
     }
 
@@ -172,7 +173,7 @@ class OnboardingActivity : ComponentActivity() {
                 KEY_ONBOARDING_STEP,
                 step.coerceIn(
                     0,
-                    6
+                    7
                 )
             )
             .apply()
@@ -321,7 +322,7 @@ private fun PromptLauncherOnboarding(
         mutableIntStateOf(
             initialStep.coerceIn(
                 0,
-                6
+                7
             )
         )
     }
@@ -941,7 +942,7 @@ private fun PromptLauncherOnboarding(
 
                 Text(
                     text =
-                        "${step + 1} / 7",
+                        "${step + 1} / 8",
                     color =
                         Color(0xFF707070),
                     fontSize =
@@ -1021,6 +1022,21 @@ private fun PromptLauncherOnboarding(
                     }
 
                     3 -> {
+                        EmailSetupStep(
+                            settings =
+                                launcherSettings,
+                            onSettingsChange = {
+                                    updated ->
+                                launcherSettings =
+                                    updated
+                                launcherSettingsStore.save(
+                                    updated
+                                )
+                            }
+                        )
+                    }
+
+                    4 -> {
                         TasksSetupStep(
                             provider =
                                 taskProvider,
@@ -1042,7 +1058,7 @@ private fun PromptLauncherOnboarding(
                         )
                     }
 
-                    4 -> {
+                    5 -> {
                         GeminiSetupStep(
                             apiKey =
                                 geminiApiKey,
@@ -1055,7 +1071,7 @@ private fun PromptLauncherOnboarding(
                         )
                     }
 
-                    5 -> {
+                    6 -> {
                         AppearanceSetupStep(
                             settings =
                                 launcherSettings,
@@ -1215,6 +1231,33 @@ private fun PromptLauncherOnboarding(
                 }
 
                 3 -> {
+                    SetupPrimaryButton(
+                        text =
+                            "CONTINUE",
+                        onClick = {
+                            step =
+                                4
+                        }
+                    )
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                6.dp
+                            )
+                    )
+
+                    SetupSecondaryButton(
+                        text =
+                            "BACK",
+                        onClick = {
+                            step =
+                                2
+                        }
+                    )
+                }
+
+                4 -> {
                     val taskButtonText =
                         when {
                             todoistToken.isNotBlank() ->
@@ -1253,7 +1296,7 @@ private fun PromptLauncherOnboarding(
                             }
 
                             step =
-                                4
+                                5
                         }
                     )
 
@@ -1269,18 +1312,18 @@ private fun PromptLauncherOnboarding(
                             "BACK",
                         onClick = {
                             step =
-                                2
+                                3
                         }
                     )
                 }
 
-                5 -> {
+                6 -> {
                     SetupPrimaryButton(
                         text =
                             "CONTINUE",
                         onClick = {
                             step =
-                                6
+                                7
                         }
                     )
 
@@ -1296,12 +1339,12 @@ private fun PromptLauncherOnboarding(
                             "BACK",
                         onClick = {
                             step =
-                                4
+                                5
                         }
                     )
                 }
 
-                4 -> {
+                5 -> {
                     SetupPrimaryButton(
                         text =
                             when {
@@ -1332,7 +1375,7 @@ private fun PromptLauncherOnboarding(
                             }
 
                             step =
-                                5
+                                6
                         }
                     )
 
@@ -1846,6 +1889,165 @@ private fun UsageAccessPromptDialog(
                     onDismiss
             )
         }
+    }
+}
+
+/*
+ * EMAIL
+ *
+ * Email works like texting: Prompt Launcher shows new mail on the home
+ * screen and in the hub, and opening it goes to the email app. This
+ * step picks which email apps count. The first one picked is the main
+ * app that opens for "mail". Changeable later in settings → noti.
+ */
+@Composable
+private fun EmailSetupStep(
+    settings: LauncherSettings,
+    onSettingsChange: (LauncherSettings) -> Unit
+) {
+
+    val context =
+        LocalContext.current
+
+    val providers =
+        remember(
+            context
+        ) {
+            findEmailProviders(
+                context
+            )
+        }
+
+    Column {
+        Text(
+            text =
+                "EMAIL",
+            color =
+                Color(0xFFF1F1F1),
+            fontSize =
+                26.sp,
+            fontFamily =
+                PoppinsFamily,
+            fontWeight =
+                FontWeight.Bold
+        )
+
+        Spacer(
+            modifier =
+                Modifier.height(
+                    6.dp
+                )
+        )
+
+        Text(
+            text =
+                "Pick the email apps you use. New mail shows on your home screen and in the hub, and opens in that app, just like texts. The first one you pick is your main email app.",
+            color =
+                Color(0xFF999999),
+            fontSize =
+                14.sp,
+            lineHeight =
+                20.sp,
+            fontFamily =
+                PoppinsFamily
+        )
+
+        Spacer(
+            modifier =
+                Modifier.height(
+                    12.dp
+                )
+        )
+
+        if (
+            providers.isEmpty()
+        ) {
+            Text(
+                text =
+                    "No email apps found. You can pick one later in settings → noti.",
+                color =
+                    Color(0xFF777777),
+                fontSize =
+                    12.sp,
+                lineHeight =
+                    17.sp,
+                fontFamily =
+                    PoppinsFamily
+            )
+        }
+
+        providers.forEach { provider ->
+
+            val picked =
+                provider.packageName in
+                        settings.mailApps
+
+            val isMain =
+                settings.mailApps.firstOrNull() ==
+                        provider.packageName
+
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            onSettingsChange(
+                                settings.copy(
+                                    mailApps =
+                                        if (
+                                            picked
+                                        ) {
+                                            settings.mailApps -
+                                                    provider.packageName
+                                        } else {
+                                            settings.mailApps +
+                                                    provider.packageName
+                                        }
+                                )
+                            )
+                        }
+            ) {
+                CompactPermissionStatusRow(
+                    label =
+                        provider.label.uppercase(),
+                    status =
+                        when {
+                            isMain -> "MAIN"
+                            picked -> "ON"
+                            else -> "ADD"
+                        },
+                    ready =
+                        picked
+                )
+            }
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        7.dp
+                    )
+            )
+        }
+
+        Spacer(
+            modifier =
+                Modifier.height(
+                    5.dp
+                )
+        )
+
+        Text(
+            text =
+                "Picking none uses every email app on your phone.",
+            color =
+                Color(0xFF5F5F5F),
+            fontSize =
+                11.5.sp,
+            lineHeight =
+                15.5.sp,
+            fontFamily =
+                PoppinsFamily
+        )
     }
 }
 

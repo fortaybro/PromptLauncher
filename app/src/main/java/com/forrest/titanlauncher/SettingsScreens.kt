@@ -158,6 +158,8 @@ import com.forrest.titanlauncher.contacts.EmailContact
 import com.forrest.titanlauncher.messages.SmsDatabase
 import com.forrest.titanlauncher.messages.SmsMessage
 import com.forrest.titanlauncher.messages.SmsRoleManager
+import com.forrest.titanlauncher.mail.findMailApps
+import com.forrest.titanlauncher.mail.findEmailProviders
 import com.forrest.titanlauncher.messages.SmsSender
 import com.forrest.titanlauncher.mail.GmailRepository
 import com.forrest.titanlauncher.mail.GoogleMailAuthManager
@@ -744,7 +746,7 @@ internal fun SettingsMainScreen(
         SettingsNavigationRow(
             symbol = "•",
             title = "noti",
-            subtitle = "hub notification apps",
+            subtitle = "hub apps & email app",
             onClick = onNotifications
         )
 
@@ -1322,7 +1324,6 @@ internal fun NotificationSettingsScreen(
         val hidden =
             buildSet {
 
-                add("com.google.android.gm")
                 add("com.google.android.dialer")
                 add("com.android.dialer")
 
@@ -1339,6 +1340,26 @@ internal fun NotificationSettingsScreen(
                 app.packageName in hidden
             }
     }
+
+    /*
+     * Where "email <name>" writes the new message: Prompt Launcher's
+     * own Gmail compose, or one of the installed mail apps.
+     */
+    val mailApps = remember(context) {
+        findMailApps(context)
+    }
+
+    val emailProviders = remember(context) {
+        findEmailProviders(context)
+    }
+
+    val composeChoices =
+        listOf(
+            "" to "prompt launcher (gmail)"
+        ) +
+                mailApps.map {
+                    it.packageName to it.label.lowercase()
+                }
 
     Column(
         modifier = Modifier
@@ -1360,6 +1381,119 @@ internal fun NotificationSettingsScreen(
             verticalArrangement = Arrangement.spacedBy(5.dp)
         ) {
             item {
+                SettingsSectionLabel(text = "EMAIL APPS")
+            }
+
+            /*
+             * Their notifications fill the hub's email tab, and the
+             * first one picked opens for "mail". None picked means
+             * every installed email app.
+             */
+            items(
+                items = emailProviders,
+                key = { "provider:" + it.packageName }
+            ) { provider ->
+                val picked =
+                    provider.packageName in settings.mailApps
+
+                SettingsControlCard {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onSettingsChange(
+                                    settings.copy(
+                                        mailApps =
+                                            if (picked) {
+                                                settings.mailApps - provider.packageName
+                                            } else {
+                                                settings.mailApps + provider.packageName
+                                            }
+                                    )
+                                )
+                            }
+                            .padding(vertical = 1.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = provider.label.lowercase(),
+                            color = PrimaryText,
+                            fontSize = 11.sp,
+                            lineHeight = 12.sp,
+                            fontFamily = InterfaceFont,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Text(
+                            text = when {
+                                !picked -> ""
+                                settings.mailApps.firstOrNull() ==
+                                        provider.packageName -> "main"
+                                else -> "on"
+                            },
+                            color = AccentOrange,
+                            fontSize = 8.sp,
+                            fontFamily = InterfaceFont,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+
+            item {
+                Spacer(Modifier.height(3.dp))
+                SettingsSectionLabel(text = "COMPOSE EMAIL IN")
+            }
+
+            items(
+                items = composeChoices,
+                key = { "compose:" + it.first }
+            ) { (packageName, label) ->
+                val selected =
+                    settings.mailComposeApp == packageName
+
+                SettingsControlCard {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onSettingsChange(
+                                    settings.copy(
+                                        mailComposeApp = packageName
+                                    )
+                                )
+                            }
+                            .padding(vertical = 1.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = label,
+                            color = PrimaryText,
+                            fontSize = 11.sp,
+                            lineHeight = 12.sp,
+                            fontFamily = InterfaceFont,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Text(
+                            text = if (selected) "selected" else "",
+                            color = AccentOrange,
+                            fontSize = 8.sp,
+                            fontFamily = InterfaceFont,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+
+            item {
+                Spacer(Modifier.height(3.dp))
                 SettingsSectionLabel(text = "HUB APPS")
             }
 

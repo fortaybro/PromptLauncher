@@ -168,6 +168,7 @@ import com.forrest.titanlauncher.messages.SmsSender
 import com.forrest.titanlauncher.mail.GmailRepository
 import com.forrest.titanlauncher.mail.GoogleMailAuthManager
 import com.forrest.titanlauncher.mail.MailMessage
+import com.forrest.titanlauncher.mail.allMailPackages
 import com.forrest.titanlauncher.notes.NoteCategory
 import com.forrest.titanlauncher.notes.NoteItem
 import com.forrest.titanlauncher.notes.NoteStyleRange
@@ -486,8 +487,15 @@ internal fun HubScreen(
                             )
                         }
 
+                /*
+                 * Email now works like texting: rows come from the
+                 * email apps' own notifications (below), and tapping
+                 * one opens it in that app. Gmail read through the API
+                 * is no longer listed here, which would only duplicate
+                 * Gmail's notifications.
+                 */
                 val emailItems =
-                    mailMessages.map {
+                    emptyList<MailMessage>().map {
                             message ->
 
                         HubDisplayItem(
@@ -600,6 +608,21 @@ internal fun HubScreen(
                         )
                     }
 
+                /*
+                 * Spark, Samsung Email, Outlook and other mail apps:
+                 * their notifications are filed as email, not noti.
+                 */
+                val mailPackages =
+                    if (
+                        EnabledMailApps.isNotEmpty()
+                    ) {
+                        EnabledMailApps.toSet()
+                    } else {
+                        allMailPackages(
+                            context
+                        )
+                    }
+
                 val notificationItems =
                     appNotifications
                         .filter { notification ->
@@ -635,6 +658,48 @@ internal fun HubScreen(
                                 notification
                                     .messages
                                     .lastOrNull()
+
+                            val isMailApp =
+                                !isConversation &&
+                                        notification.packageName in
+                                        mailPackages
+
+                            if (
+                                isMailApp
+                            ) {
+                                /*
+                                 * Sender as the title, the app name
+                                 * and subject/preview underneath.
+                                 */
+                                return@map HubDisplayItem(
+                                    id =
+                                        "notification:${notification.key}",
+                                    type =
+                                        HubItemType.EMAIL,
+                                    title =
+                                        notification.title
+                                            .ifBlank {
+                                                notification.appName
+                                            },
+                                    preview =
+                                        listOf(
+                                            notification.appName,
+                                            notification.text
+                                        )
+                                            .filter {
+                                                it.isNotBlank()
+                                            }
+                                            .joinToString(
+                                                separator = " · "
+                                            ),
+                                    timestamp =
+                                        notification.timestamp,
+                                    unread =
+                                        true,
+                                    notificationKey =
+                                        notification.key
+                                )
+                            }
 
                             HubDisplayItem(
                                 id =
@@ -718,7 +783,9 @@ internal fun HubScreen(
 
             if (
                 item.type ==
-                HubItemType.NOTIFICATION
+                HubItemType.NOTIFICATION ||
+                item.type ==
+                HubItemType.EMAIL
             ) {
 
                 item.notificationKey
@@ -952,10 +1019,30 @@ internal fun HubScreen(
 
             HubItemType.EMAIL -> {
 
-                item.mailMessage
-                    ?.let(
-                        onOpenMail
+                val mailMessage =
+                    item.mailMessage
+
+                if (
+                    mailMessage != null
+                ) {
+                    onOpenMail(
+                        mailMessage
                     )
+                } else {
+                    /*
+                     * An email from another mail app: open it there.
+                     */
+                    item.notificationKey
+                        ?.let {
+                            NotificationCenter
+                                .openNotification(
+                                    key =
+                                        it,
+                                    context =
+                                        context
+                                )
+                        }
+                }
             }
 
             HubItemType.CALL -> {
