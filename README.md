@@ -1,13 +1,9 @@
 # Prompt Launcher
 
-A keyboard-first, text-only Android home screen. Type what you want, press Enter, and it happens. Built for phones with a physical keyboard (developed on the Unihertz Titan 2) and happy on any Android 9+ phone.
+A keyboard-first, text-only Android home screen. Type what you want, press Enter, and it happens. Built for phones with a physical keyboard and developed on the Unihertz Titan 2. It runs on Android 9 and later, but other devices are less tested.
 
 > **Status:** Beta 1.2. Expect rough edges. Bug reports are welcome; open an issue or type `bug` in the launcher.
-## Download
 
-**[⬇ Download the latest APK](https://github.com/fortaybro/PromptLauncher/releases/latest)**. Open the release and tap the `.apk` file under **Assets**.
-
-To install, allow your browser or file manager to "install unknown apps" when Android asks, then open the APK. After installing, set Prompt Launcher as your home app.
 ---
 
 ## What it does
@@ -55,7 +51,7 @@ Don't take our word for it. The whole app is in this repo, and you can watch eve
 
 ## Permissions
 
-Each permission is optional. Features that need one ask when you use them.
+Onboarding asks for contacts and calendar. Everything else is optional, and a feature only works once its permission is granted.
 
 | Permission | Used for |
 |---|---|
@@ -68,7 +64,7 @@ Each permission is optional. Features that need one ask when you use them.
 
 ## Build it yourself
 
-**Requirements:** Android Studio (recent stable), JDK 17+, and a device or emulator running Android 9 (API 28) or later.
+**Requirements:** a recent stable Android Studio, and a device or emulator running Android 9 (API 28) or later. Gradle downloads the JDK it needs automatically.
 
 1. Clone the repo and open the project folder in Android Studio.
 2. Let Gradle sync, then **Run** on your device.
