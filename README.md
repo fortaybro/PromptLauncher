@@ -2,7 +2,7 @@
 
 A keyboard-first, text-only Android home screen. Type what you want, press Enter, and it happens. Built for phones with a physical keyboard and developed on the Unihertz Titan 2. It runs on Android 9 and later, but other devices are less tested.
 
-> **Status:** Beta 1.2. Expect rough edges. Bug reports are welcome; open an issue or type `bug` in the launcher.
+> **Status:** Beta 1.3. Expect rough edges. Bug reports are welcome; open an issue or type `bug` in the launcher.
 
 ---
 
