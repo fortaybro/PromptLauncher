@@ -2,7 +2,9 @@ package com.forrest.titanlauncher
 
 import android.Manifest
 import android.app.Activity
+import android.content.BroadcastReceiver
 import android.content.ContentUris
+import android.content.IntentFilter
 import android.content.Context
 import android.content.ComponentName
 import android.content.Intent
@@ -200,6 +202,7 @@ import com.forrest.titanlauncher.settings.ReadabilityMotion
 import com.forrest.titanlauncher.settings.ReadabilityTextSize
 import com.forrest.titanlauncher.settings.ReadabilityTextWeight
 import com.forrest.titanlauncher.settings.LauncherThemeMode
+import com.forrest.titanlauncher.todoist.TaskProvider
 import com.forrest.titanlauncher.todoist.TodoistRepository
 import com.forrest.titanlauncher.todoist.TodoistTokenStore
 import com.forrest.titanlauncher.usage.CurrentHourUsageDiagnostics
@@ -207,6 +210,7 @@ import com.forrest.titanlauncher.usage.HourProductivityStatus
 import com.forrest.titanlauncher.usage.UsageStatsRepository
 import com.forrest.titanlauncher.weather.WeatherRepository
 import com.forrest.titanlauncher.weather.WeatherSnapshot
+import com.forrest.titanlauncher.weather.temperatureText
 import com.forrest.titanlauncher.ui.theme.TitanLauncherTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
@@ -345,8 +349,43 @@ fun TitanHomeScreen(
         mutableStateOf(false)
     }
 
+    /*
+     * Google Tasks / Todoist setup after onboarding ("taskssetup").
+     */
+    var showTaskSetup by remember {
+        mutableStateOf(false)
+    }
+
     val context =
         LocalContext.current
+
+    /*
+     * Which task app "+" adds to. Re-read whenever taskssetup closes,
+     * so the chips above the prompt always show the live choice.
+     */
+    val taskProviderStore =
+        remember {
+            TodoistTokenStore(
+                context
+            )
+        }
+
+    var currentTaskProvider by remember {
+        mutableStateOf(
+            taskProviderStore.getTaskProvider()
+        )
+    }
+
+    LaunchedEffect(
+        showTaskSetup
+    ) {
+        if (
+            !showTaskSetup
+        ) {
+            currentTaskProvider =
+                taskProviderStore.getTaskProvider()
+        }
+    }
 
     val launcherView =
         LocalView.current
@@ -543,6 +582,17 @@ fun TitanHomeScreen(
         )
     }
 
+    /*
+     * Wall-clock time of the last weather load. The 15-minute loop
+     * below pauses while the phone sleeps, so waking the phone checks
+     * this and refreshes if it is out of date.
+     */
+    var lastWeatherRefreshAt by remember {
+        mutableStateOf(
+            0L
+        )
+    }
+
     fun refreshWeather() {
         if (
             ContextCompat.checkSelfPermission(
@@ -559,6 +609,8 @@ fun TitanHomeScreen(
             weatherSnapshot =
                 weatherRepository
                     .loadCurrentWeather()
+            lastWeatherRefreshAt =
+                System.currentTimeMillis()
         }
     }
 
@@ -594,6 +646,8 @@ fun TitanHomeScreen(
                 weatherSnapshot =
                     weatherRepository
                         .loadCurrentWeather()
+                lastWeatherRefreshAt =
+                    System.currentTimeMillis()
             }
 
             delay(
@@ -626,16 +680,42 @@ fun TitanHomeScreen(
      * lookups are the same ones the messages inbox performs, and the
      * list is short, so this stays cheap.
      */
+    /*
+     * Texts only reach Prompt's own message store while Prompt is the
+     * default texting app. Otherwise anything "unread" there is left
+     * over from before and was likely read in the messaging app long
+     * ago, so the messaging app's notifications are the only source
+     * of what is unread. Re-checked whenever the launcher returns.
+     */
+    val promptOwnsSms =
+        remember(
+            LauncherResumeCount
+        ) {
+            runCatching {
+                smsRoleManager.isDefaultSmsApp()
+            }
+                .getOrDefault(
+                    true
+                )
+        }
+
     val quickReplyEntries =
         remember(
             recentMessages,
             quickReplyNotifications,
-            hasContactsPermission
+            hasContactsPermission,
+            promptOwnsSms
         ) {
 
             buildQuickReplyEntries(
                 recentMessages =
-                    recentMessages,
+                    if (
+                        promptOwnsSms
+                    ) {
+                        recentMessages
+                    } else {
+                        emptyList()
+                    },
                 notifications =
                     quickReplyNotifications,
                 contactNameFor = { number ->
@@ -690,6 +770,7 @@ fun TitanHomeScreen(
      */
     val unreadCount =
         if (
+            promptOwnsSms &&
             storedUnreadCount > 0
         ) {
             storedUnreadCount
@@ -701,21 +782,120 @@ fun TitanHomeScreen(
             }
         }
 
-    val currentDateTime by
-    produceState(
-        initialValue =
+    /*
+     * CLOCK
+     *
+     * A plain delay() loop stops counting while the phone is asleep,
+     * which is why the time could be minutes behind when the screen
+     * came on. Instead the clock is set:
+     *  - the moment the screen turns on or the phone is unlocked,
+     *  - by Android's own minute tick (TIME_TICK) while the screen is on,
+     *  - when the time or time zone changes,
+     *  - and by a loop that wakes exactly at each new minute, as a
+     *    backup.
+     */
+    var currentDateTime by remember {
+        mutableStateOf(
             Date()
+        )
+    }
+
+    DisposableEffect(
+        Unit
     ) {
 
+        val clockReceiver =
+            object : BroadcastReceiver() {
+                override fun onReceive(
+                    receiverContext: Context?,
+                    intent: Intent?
+                ) {
+                    currentDateTime =
+                        Date()
+
+                    /*
+                     * Waking the phone also catches up stale weather
+                     * (for example "sunny" still showing after dark).
+                     */
+                    val woke =
+                        intent?.action == Intent.ACTION_SCREEN_ON ||
+                                intent?.action == Intent.ACTION_USER_PRESENT
+
+                    /*
+                     * Also drop texts and emails that were read on
+                     * another device or app while the screen was off.
+                     */
+                    if (
+                        woke
+                    ) {
+                        NotificationCenter
+                            .requestRefresh()
+                    }
+
+                    if (
+                        woke &&
+                        System.currentTimeMillis() - lastWeatherRefreshAt >
+                        WEATHER_STALE_AFTER_MS
+                    ) {
+                        refreshWeather()
+                    }
+                }
+            }
+
+        val clockFilter =
+            IntentFilter().apply {
+                addAction(Intent.ACTION_TIME_TICK)
+                addAction(Intent.ACTION_TIME_CHANGED)
+                addAction(Intent.ACTION_TIMEZONE_CHANGED)
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_USER_PRESENT)
+            }
+
+        val registered =
+            runCatching {
+                ContextCompat.registerReceiver(
+                    context,
+                    clockReceiver,
+                    clockFilter,
+                    ContextCompat.RECEIVER_NOT_EXPORTED
+                )
+            }.isSuccess
+
+        currentDateTime =
+            Date()
+
+        onDispose {
+            if (
+                registered
+            ) {
+                runCatching {
+                    context.unregisterReceiver(
+                        clockReceiver
+                    )
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(
+        Unit
+    ) {
         while (
             true
         ) {
+            val now =
+                System.currentTimeMillis()
 
-            value =
-                Date()
+            currentDateTime =
+                Date(
+                    now
+                )
 
+            /*
+             * Sleep until just after the next minute starts.
+             */
             delay(
-                30_000
+                60_000L - (now % 60_000L) + 50L
             )
         }
     }
@@ -3260,7 +3440,7 @@ fun TitanHomeScreen(
                 setStatusText(
                     weatherSnapshot
                         ?.let { snapshot ->
-                            "✓ ${snapshot.condition.uppercase()} · ${snapshot.temperatureF}°"
+                            "✓ ${snapshot.condition.uppercase()} · ${snapshot.temperatureText(WeatherInCelsius)}"
                         }
                         ?: "✓ WEATHER READY"
                 )
@@ -3406,6 +3586,20 @@ fun TitanHomeScreen(
                 }
             }
 
+            return
+        }
+
+        if (
+            raw.lowercase() in
+            TaskSetupCommands
+        ) {
+            commandText =
+                ""
+            showTaskSetup =
+                true
+            setStatusText(
+                ""
+            )
             return
         }
 
@@ -4929,6 +5123,7 @@ fun TitanHomeScreen(
                 !showCommandHelp &&
                 !showCalendarSetup &&
                 !showGeminiSetup &&
+                !showTaskSetup &&
                 !showQuickReply &&
                 !showBattery &&
                 !showQuickToggles &&
@@ -5033,6 +5228,7 @@ fun TitanHomeScreen(
         showCommandHelp,
         showCalendarSetup,
         showGeminiSetup,
+        showTaskSetup,
         showQuickReply,
         showBattery,
         showQuickToggles,
@@ -5050,6 +5246,7 @@ fun TitanHomeScreen(
                         showCommandHelp ||
                         showCalendarSetup ||
                         showGeminiSetup ||
+                        showTaskSetup ||
                         showQuickReply ||
                         showBattery ||
                         showQuickToggles ||
@@ -5059,6 +5256,24 @@ fun TitanHomeScreen(
         }
     }
 
+
+    if (
+        showTaskSetup
+    ) {
+        TaskSetupScreen(
+            onStatus = {
+                setStatusText(
+                    it
+                )
+            },
+            onBack = {
+                showTaskSetup =
+                    false
+            }
+        )
+
+        return
+    }
 
     if (
         showGeminiSetup
@@ -5304,7 +5519,7 @@ fun TitanHomeScreen(
                                     text =
                                         weatherSnapshot
                                             ?.let { snapshot ->
-                                                "${snapshot.condition.lowercase()}, ${snapshot.temperatureF}°"
+                                                "${snapshot.condition.lowercase()}, ${snapshot.temperatureText(WeatherInCelsius)}"
                                             }
                                             ?: "weather",
                                     color =
@@ -6198,6 +6413,89 @@ fun TitanHomeScreen(
                                     effectiveSearchTarget == "apps",
                                 onClick = {
                                     setSearchInApps(true)
+                                }
+                            )
+                        }
+                    }
+                }
+
+                /*
+                 * TASK PICKER
+                 *
+                 * While typing "+", chips pick where the task goes.
+                 * Switching keeps both accounts: a saved Todoist token
+                 * and a Google Tasks sign-in are reused, so nothing is
+                 * re-entered. An app that was never set up opens
+                 * taskssetup instead.
+                 */
+                val showTaskChips =
+                    ShowTaskPicker &&
+                            lockedTextContact == null &&
+                            (TaskChipGoogle || TaskChipTodoist) &&
+                            commandText
+                                .trimStart()
+                                .startsWith(
+                                    "+"
+                                )
+
+                if (
+                    showTaskChips
+                ) {
+
+                    Row(
+                        modifier =
+                            Modifier
+                                .padding(
+                                    bottom = 5.dp
+                                ),
+                        horizontalArrangement =
+                            Arrangement.spacedBy(
+                                6.dp
+                            )
+                    ) {
+
+                        if (
+                            TaskChipGoogle
+                        ) {
+                            SearchTargetChip(
+                                label = "google tasks",
+                                selected =
+                                    currentTaskProvider ==
+                                            TaskProvider.GOOGLE_TASKS,
+                                onClick = {
+                                    if (
+                                        taskProviderStore.isGoogleTasksConnected()
+                                    ) {
+                                        taskProviderStore.selectGoogleTasks()
+                                        currentTaskProvider =
+                                            TaskProvider.GOOGLE_TASKS
+                                    } else {
+                                        showTaskSetup =
+                                            true
+                                    }
+                                }
+                            )
+                        }
+
+                        if (
+                            TaskChipTodoist
+                        ) {
+                            SearchTargetChip(
+                                label = "todoist",
+                                selected =
+                                    currentTaskProvider ==
+                                            TaskProvider.TODOIST,
+                                onClick = {
+                                    if (
+                                        taskProviderStore.hasTodoistToken()
+                                    ) {
+                                        taskProviderStore.selectTodoist()
+                                        currentTaskProvider =
+                                            TaskProvider.TODOIST
+                                    } else {
+                                        showTaskSetup =
+                                            true
+                                    }
                                 }
                             )
                         }
@@ -7539,6 +7837,12 @@ internal fun WordCommandHelpCard() {
         )
         WordCommandHelpRow(
             command =
+                "taskssetup",
+            label =
+                "google tasks or todoist"
+        )
+        WordCommandHelpRow(
+            command =
                 "email <name>",
             label =
                 "compose mail"
@@ -8663,6 +8967,17 @@ fun InfoCard(
 internal val LauncherSymbolCommands =
     setOf('@', '/', ':', '+', '?', '"', '!', '.')
 
+/*
+ * Words that open the tasks setup screen.
+ */
+internal val TaskSetupCommands =
+    setOf(
+        "taskssetup",
+        "tasksetup",
+        "googletasks",
+        "tasks setup"
+    )
+
 internal val LauncherLegacyCommands =
     listOf(
         "weathersetup",
@@ -8673,6 +8988,10 @@ internal val LauncherLegacyCommands =
         "geminisetup",
         "geministatus",
         "geminidisconnect",
+        "taskssetup",
+        "tasksetup",
+        "googletasks",
+        "tasks setup",
         "email",
         "mail",
         "e",
@@ -9664,6 +9983,13 @@ internal fun CommandHintsCard(
                 "todoistsetup"
 
             trimmed.startsWith(
+                "taskssetup",
+                ignoreCase =
+                    true
+            ) ->
+                "taskssetup"
+
+            trimmed.startsWith(
                 "settings",
                 ignoreCase =
                     true
@@ -9784,9 +10110,9 @@ internal fun CommandHintsCard(
                     label = "assistant"
                 ),
                 WordCommandHintItem(
-                    display = "todoistsetup",
-                    value = "todoistsetup",
-                    label = "todoist"
+                    display = "taskssetup",
+                    value = "taskssetup",
+                    label = "tasks"
                 ),
                 WordCommandHintItem(
                     display = "bug",
@@ -11866,3 +12192,9 @@ private fun PromptAppListPanel(
         }
     }
 }
+
+/*
+ * Weather older than this is reloaded when the phone wakes.
+ */
+private const val WEATHER_STALE_AFTER_MS =
+    15 * 60 * 1000L

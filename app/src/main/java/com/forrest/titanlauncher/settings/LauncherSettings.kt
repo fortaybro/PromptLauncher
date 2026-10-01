@@ -135,6 +135,10 @@ data class LauncherSettings(
     val buttonLabelSize: HomeElementSize = HomeElementSize.NORMAL,
     val buttonCorners: HomeCornerStyle = HomeCornerStyle.SOFT,
     val showWeather: Boolean = true,
+    /*
+     * Show temperatures in Celsius instead of Fahrenheit.
+     */
+    val weatherCelsius: Boolean = false,
 
     /*
      * Offers chrome or claude above the prompt bar when free text is
@@ -149,6 +153,13 @@ data class LauncherSettings(
     val searchChipChrome: Boolean = true,
     val searchChipClaude: Boolean = true,
     val searchChipApps: Boolean = true,
+    /*
+     * Chips above the prompt while typing "+": which task app the
+     * new task goes to.
+     */
+    val showTaskPicker: Boolean = true,
+    val taskChipGoogle: Boolean = true,
+    val taskChipTodoist: Boolean = true,
     /*
      * Package of the mail app new emails are written in. Blank means
      * Prompt Launcher's own Gmail compose.

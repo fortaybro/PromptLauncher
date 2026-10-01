@@ -166,6 +166,77 @@ object NotificationCenter {
         )
 
     /*
+     * Other texting apps people use as their default. Their
+     * notifications are treated like Google Messages': left in the
+     * shade, and dropped here once the app clears them.
+     */
+    private val otherMessagingApps =
+        setOf(
+            "com.samsung.android.messaging",
+            "com.textra",
+            "com.moez.QKSMS",
+            "xyz.klinker.messenger",
+            "org.fossify.messages",
+            "com.simplemobiletools.smsmessenger",
+            "com.verizon.messaging.vzmsgs",
+            "com.motorola.messaging",
+            "com.oneplus.mms"
+        )
+
+    private var cachedDefaultSms: String? =
+        null
+
+    private var cachedDefaultSmsAt =
+        0L
+
+    /*
+     * True for any app that handles texts: the known ones above, plus
+     * whatever app is currently the default for SMS.
+     */
+    private fun isMessagingPackage(
+        context: Context,
+        packageName: String
+    ): Boolean {
+
+        if (
+            packageName in messagingSources ||
+            packageName in otherMessagingApps
+        ) {
+            return true
+        }
+
+        /*
+         * The hub refreshes every second, so the answer is cached for
+         * half a minute rather than asking Android each time.
+         */
+        val now =
+            System.currentTimeMillis()
+
+        if (
+            now - cachedDefaultSmsAt > 30_000L
+        ) {
+            cachedDefaultSms =
+                runCatching {
+                    Telephony.Sms
+                        .getDefaultSmsPackage(
+                            context
+                        )
+                }
+                    .getOrNull()
+
+            cachedDefaultSmsAt =
+                now
+        }
+
+        val defaultSms =
+            cachedDefaultSms
+
+        return defaultSms != null &&
+                defaultSms != context.packageName &&
+                defaultSms == packageName
+    }
+
+    /*
      * A MessagingStyle notification usually carries only the messages
      * that are currently unread — often one or two. Reading it alone
      * can never show more than the app chose to include.
@@ -421,8 +492,10 @@ object NotificationCenter {
          * is the only record of that message, so it is left alone.
          */
         val ownsMessaging =
-            packageName in
-                    messagingSources
+            isMessagingPackage(
+                context,
+                packageName
+            )
 
         /*
          * Email is treated the same way as texts: the email app's
@@ -458,10 +531,10 @@ object NotificationCenter {
     internal fun handleActiveNotifications(
         context: Context,
         service: TitanNotificationListenerService,
-        activeNotifications: Array<StatusBarNotification>
+        activeNotifications: Array<StatusBarNotification>?
     ) {
         activeNotifications
-            .forEach {
+            ?.forEach {
                     sbn ->
 
                 handleNotificationPosted(
@@ -473,6 +546,70 @@ object NotificationCenter {
                         sbn
                 )
             }
+
+        /*
+         * Null means Android could not give us the list right now, so
+         * there is nothing safe to compare against.
+         */
+        if (
+            activeNotifications == null
+        ) {
+            return
+        }
+
+        /*
+         * READ ELSEWHERE
+         *
+         * Texting and email apps keep their notification posted only
+         * while something is unread, and clear it once you open the
+         * conversation. Prompt normally hears that removal, but not
+         * if Android had paused the listener at the time. So on every
+         * refresh, any text or email Prompt still holds whose
+         * notification is gone from the shade has been read, and is
+         * dropped from quick reply and the hub.
+         *
+         * Other apps are skipped: Prompt cancels their system copy on
+         * purpose, so their absence from the shade means nothing.
+         */
+        val stillPosted =
+            activeNotifications
+                .map {
+                    it.key
+                }
+                .toSet()
+
+        val readElsewhere =
+            _notifications
+                .value
+                .filter { notification ->
+
+                    notification.key !in stillPosted &&
+                            (
+                                    isMessagingPackage(
+                                        context,
+                                        notification.packageName
+                                    ) ||
+                                            isMailPackage(
+                                                context,
+                                                notification.packageName
+                                            )
+                                    )
+                }
+                .map {
+                    it.key
+                }
+                .toSet()
+
+        if (
+            readElsewhere.isNotEmpty()
+        ) {
+            _notifications.value =
+                _notifications
+                    .value
+                    .filterNot {
+                        it.key in readElsewhere
+                    }
+        }
     }
 
     private fun shouldRouteThroughPromptLauncher(
@@ -1288,8 +1425,10 @@ class TitanNotificationListenerService :
                 service =
                     this,
                 activeNotifications =
-                    activeNotifications
-                        ?: emptyArray()
+                    runCatching {
+                        activeNotifications
+                    }
+                        .getOrNull()
             )
     }
 }

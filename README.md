@@ -2,7 +2,7 @@
 
 A keyboard-first, text-only Android home screen. Type what you want, press Enter, and it happens. Built for phones with a physical keyboard and developed on the Unihertz Titan 2. It runs on Android 9 and later, but other devices are less tested.
 
-> **Status:** Beta 1.3. Expect rough edges. Bug reports are welcome; open an issue or type `bug` in the launcher.
+> **Status:** Beta 1.3.1. Expect rough edges. Bug reports are welcome; open an issue or type `bug` in the launcher.
 
 ## Download
 
@@ -41,7 +41,9 @@ Start typing on the home screen and the prompt opens. A symbol at the start pick
 
 Prompt remembers your choice. Pick which chips appear under **Settings → home screen → search picker**.
 
-**Word commands:** `go <place>` (maps), `email <name>`, `settings`, `calendarsetup`, `weathersetup`, `usagesetup`, `geminisetup`, `todoistsetup`, `bug`.
+**Tasks:** while typing `+`, chips above the prompt pick where the to-do goes: **google tasks** or **todoist**. Switching keeps both accounts signed in, so your Todoist token is never asked for twice. Pick which chips appear under **Settings → home screen → task picker**.
+
+**Word commands:** `go <place>` (maps), `email <name>`, `settings`, `calendarsetup`, `weathersetup`, `usagesetup`, `geminisetup`, `taskssetup` (Google Tasks or Todoist), `bug`.
 
 ### Texting
 
@@ -68,7 +70,7 @@ Pick your email apps during onboarding, or later in **Settings → noti → EMAI
 
 ### Everything else
 
-- **At a glance:** time, date, weather, unread texts and new mail, and your next calendar event.
+- **At a glance:** time, date, weather, unread texts and new mail, and your next calendar event. Weather shows °F or °C (**Settings → home screen → weather → celsius**).
 - **Productivity dots:** 24 dots, one for each hour of the day. An hour turns red once more than 20 minutes of it went to apps you've marked as distracting.
 - **Calendar and tasks:** Google Calendar, plus Google Tasks or Todoist.
 - **Quick toggles:** Do Not Disturb, flashlight and ringer, reachable from the keyboard.
@@ -134,7 +136,11 @@ Create a free API key in [Google AI Studio](https://aistudio.google.com/), then 
 
 ### Optional: Todoist
 
-Copy your API token from Todoist (**Settings → Integrations → Developer**), then run `todoistsetup`.
+Copy your API token from Todoist (**Settings → Integrations → Developer**), then run `taskssetup` and paste it in.
+
+### Optional: Google Tasks
+
+Skipped it during onboarding? Run `taskssetup` and tap **connect google tasks**.
 
 ## Contributing
 

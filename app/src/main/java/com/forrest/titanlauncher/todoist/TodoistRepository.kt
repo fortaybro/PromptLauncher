@@ -50,7 +50,7 @@ class TodoistRepository(
             TaskProvider.NONE -> {
                 TodoistTaskResult(
                     success = false,
-                    message = "CONNECT TASKS IN SETUP"
+                    message = "RUN TASKSSETUP TO CONNECT TASKS"
                 )
             }
         }

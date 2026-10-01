@@ -256,6 +256,23 @@ class TodoistTokenStore(
         )
     }
 
+    /*
+     * True when a Todoist token is saved, whichever provider is
+     * active, so switching back to Todoist never asks for it again.
+     */
+    fun hasTodoistToken(): Boolean =
+        getToken().isNotBlank()
+
+    /*
+     * Stops adding tasks anywhere but keeps the Todoist token and the
+     * Google Tasks connection, so either can be switched back on.
+     */
+    fun turnOffTasks() {
+        setTaskProvider(
+            TaskProvider.NONE
+        )
+    }
+
     fun hasToken(): Boolean {
 
         return when (

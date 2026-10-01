@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
 import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -17,10 +18,32 @@ import java.net.URL
 import kotlin.coroutines.resume
 import kotlin.math.roundToInt
 
+/*
+ * Temperatures are always fetched and cached in Fahrenheit, then
+ * converted for display, so switching units never needs a refetch.
+ */
 data class WeatherSnapshot(
     val temperatureF: Int,
     val condition: String
 )
+
+/*
+ * Temperature in the unit chosen in settings, e.g. "84°" or "29°".
+ */
+fun WeatherSnapshot.temperatureText(
+    celsius: Boolean
+): String {
+    val value =
+        if (
+            celsius
+        ) {
+            ((temperatureF - 32) * 5.0 / 9.0).roundToInt()
+        } else {
+            temperatureF
+        }
+
+    return "$value°"
+}
 
 private data class CachedWeather(
     val snapshot: WeatherSnapshot,
@@ -260,6 +283,10 @@ class WeatherRepository(
             )
     }
 
+    /*
+     * Android 11+ only. The caller returns early on older versions.
+     */
+    @RequiresApi(Build.VERSION_CODES.R)
     private suspend fun getCurrentLocation(
         locationManager: LocationManager,
         provider: String
@@ -324,7 +351,7 @@ class WeatherRepository(
                     "https://api.open-meteo.com/v1/forecast" +
                             "?latitude=$latitude" +
                             "&longitude=$longitude" +
-                            "&current=temperature_2m,weather_code" +
+                            "&current=temperature_2m,weather_code,is_day" +
                             "&temperature_unit=fahrenheit" +
                             "&timezone=auto"
                 )
@@ -389,12 +416,25 @@ class WeatherRepository(
                         -1
                     )
 
+                /*
+                 * is_day is 1 between sunrise and sunset at this
+                 * location. Missing means assume day, as before.
+                 */
+                val isDay =
+                    current.optInt(
+                        "is_day",
+                        1
+                    ) == 1
+
                 WeatherSnapshot(
                     temperatureF =
                         temperature.roundToInt(),
                     condition =
                         conditionForCode(
-                            weatherCode
+                            code =
+                                weatherCode,
+                            isDay =
+                                isDay
                         )
                 )
             } catch (
@@ -535,16 +575,20 @@ class WeatherRepository(
     }
 
     private fun conditionForCode(
-        code: Int
+        code: Int,
+        isDay: Boolean
     ): String {
         return when (
             code
         ) {
+            /*
+             * Clear skies only read "sunny" while the sun is up.
+             */
             0 ->
-                "Sunny"
+                if (isDay) "Sunny" else "Clear"
 
             1 ->
-                "Mostly sunny"
+                if (isDay) "Mostly sunny" else "Mostly clear"
 
             2 ->
                 "Partly cloudy"
@@ -602,8 +646,12 @@ class WeatherRepository(
         private const val KEY_TEMPERATURE =
             "temperature_f"
 
+        /*
+         * Bumped when conditions gained day/night wording, so an old
+         * cached "Sunny" is never shown at night after updating.
+         */
         private const val KEY_CONDITION =
-            "condition"
+            "condition_v2"
 
         private const val KEY_LATITUDE =
             "latitude_bits"

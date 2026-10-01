@@ -119,6 +119,9 @@ class LauncherSettingsStore(
             searchChipChrome = preferences.getBoolean("search_chip_chrome", true),
             searchChipClaude = preferences.getBoolean("search_chip_claude", true),
             searchChipApps = preferences.getBoolean("search_chip_apps", true),
+            showTaskPicker = preferences.getBoolean("show_task_picker", true),
+            taskChipGoogle = preferences.getBoolean("task_chip_google", true),
+            taskChipTodoist = preferences.getBoolean("task_chip_todoist", true),
             mailComposeApp = preferences.getString("mail_compose_app", "").orEmpty(),
             mailApps = preferences.getString("mail_apps", "")
                 .orEmpty()
@@ -133,6 +136,7 @@ class LauncherSettingsStore(
             buttonLabelSize = buttonLabelSize,
             buttonCorners = buttonCorners,
             showWeather = preferences.getBoolean("show_weather", true),
+            weatherCelsius = preferences.getBoolean("weather_celsius", false),
             showProductivityDots = preferences.getBoolean("show_productivity_dots", true),
             showCalendarCard = preferences.getBoolean("show_calendar_card", true),
             showAttentionCard = preferences.getBoolean("show_attention_card", true),
@@ -171,6 +175,9 @@ class LauncherSettingsStore(
             .putBoolean("search_chip_chrome", settings.searchChipChrome)
             .putBoolean("search_chip_claude", settings.searchChipClaude)
             .putBoolean("search_chip_apps", settings.searchChipApps)
+            .putBoolean("show_task_picker", settings.showTaskPicker)
+            .putBoolean("task_chip_google", settings.taskChipGoogle)
+            .putBoolean("task_chip_todoist", settings.taskChipTodoist)
             .putString("mail_compose_app", settings.mailComposeApp)
             .putString("mail_apps", settings.mailApps.joinToString(","))
             .putString("interface_font", settings.interfaceFont.name)
@@ -181,6 +188,7 @@ class LauncherSettingsStore(
             .putString("button_label_size", settings.buttonLabelSize.name)
             .putString("button_corners", settings.buttonCorners.name)
             .putBoolean("show_weather", settings.showWeather)
+            .putBoolean("weather_celsius", settings.weatherCelsius)
             .putBoolean("show_productivity_dots", settings.showProductivityDots)
             .putBoolean("show_calendar_card", settings.showCalendarCard)
             .putBoolean("show_attention_card", settings.showAttentionCard)
@@ -244,6 +252,10 @@ class LauncherSettingsStore(
                 .put(
                     "show_weather",
                     settings.showWeather
+                )
+                .put(
+                    "weather_celsius",
+                    settings.weatherCelsius
                 )
                 .put(
                     "show_productivity_dots",
@@ -428,6 +440,11 @@ class LauncherSettingsStore(
                 json.optBoolean(
                     "show_weather",
                     defaults.showWeather
+                ),
+            weatherCelsius =
+                json.optBoolean(
+                    "weather_celsius",
+                    defaults.weatherCelsius
                 ),
             showProductivityDots =
                 json.optBoolean(

@@ -314,9 +314,27 @@ mutableFloatStateOf(
     10f
 )
 
+/*
+ * Bumped every time the launcher comes back to the front, so the
+ * home screen can re-check things that may have changed in other apps
+ * (for example texts read in the messaging app).
+ */
+internal var LauncherResumeCount by
+mutableIntStateOf(
+    0
+)
+
 internal var ShowHomeWeather by
 mutableStateOf(
     true
+)
+
+/*
+ * Weather unit: true shows °C, false shows °F.
+ */
+internal var WeatherInCelsius by
+mutableStateOf(
+    false
 )
 
 internal var ShowHomeProductivityDots by
@@ -361,6 +379,24 @@ mutableStateOf(
  * Mail app new emails are written in. Blank means Prompt Launcher's
  * own Gmail compose.
  */
+/*
+ * Task picker settings, read by the home prompt.
+ */
+internal var ShowTaskPicker by
+mutableStateOf(
+    true
+)
+
+internal var TaskChipGoogle by
+mutableStateOf(
+    true
+)
+
+internal var TaskChipTodoist by
+mutableStateOf(
+    true
+)
+
 internal var MailComposeAppPackage by
 mutableStateOf(
     ""
@@ -712,6 +748,7 @@ internal fun applyLauncherAppearance(
         }
 
     ShowHomeWeather = settings.showWeather
+    WeatherInCelsius = settings.weatherCelsius
     ShowHomeProductivityDots = settings.showProductivityDots
     ShowHomeCalendarCard = settings.showCalendarCard
     ShowHomeAttentionCard = settings.showAttentionCard
@@ -720,6 +757,9 @@ internal fun applyLauncherAppearance(
     SearchChipClaude = settings.searchChipClaude
     SearchChipApps = settings.searchChipApps
     MailComposeAppPackage = settings.mailComposeApp
+    ShowTaskPicker = settings.showTaskPicker
+    TaskChipGoogle = settings.taskChipGoogle
+    TaskChipTodoist = settings.taskChipTodoist
     EnabledMailApps = settings.mailApps
 
     ReadabilityFontScale =
@@ -1054,6 +1094,16 @@ class MainActivity :
         }
 
         hideSystemBars()
+
+        /*
+         * Coming back from the messaging or email app: drop anything
+         * that was read there, so quick reply and the hub only show
+         * what is still unread.
+         */
+        NotificationCenter
+            .requestRefresh()
+
+        LauncherResumeCount++
     }
 
     override fun onWindowFocusChanged(
@@ -1997,8 +2047,49 @@ fun TitanApp(
                                         30
                                 )
 
+                        /*
+                         * HOME CALENDAR CARD
+                         *
+                         * Shows the next timed event on the calendar
+                         * picked in calendarsetup, never an all-day
+                         * event. Before a calendar is picked, it uses
+                         * every visible calendar, still skipping
+                         * all-day events.
+                         */
+                        val now =
+                            System.currentTimeMillis()
+
+                        val homeCalendarId =
+                            calendarSelectionStore
+                                .getPersonalCalendarId()
+
+                        val nextTimedEvent =
+                            if (
+                                homeCalendarId != null
+                            ) {
+                                runCatching {
+                                    calendarAssistRepository
+                                        .loadNextTimedEvent(
+                                            accessToken =
+                                                accessToken,
+                                            calendarId =
+                                                homeCalendarId
+                                        )
+                                }
+                                    .getOrNull()
+                            } else {
+                                snapshot.agendaEvents
+                                    .filter {
+                                        !it.allDay &&
+                                                it.startTime >= now
+                                    }
+                                    .minByOrNull {
+                                        it.startTime
+                                    }
+                            }
+
                         upcomingEvent =
-                            snapshot.nextEvent
+                            nextTimedEvent
                                 ?.let {
                                         event ->
 

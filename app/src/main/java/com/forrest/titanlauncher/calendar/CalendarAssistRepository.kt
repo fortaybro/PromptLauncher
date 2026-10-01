@@ -183,6 +183,47 @@ class CalendarAssistRepository {
     }
 
 
+    /*
+     * The next event that starts at a set time on one calendar, for
+     * the home screen's calendar card. All-day events are skipped, so
+     * the card shows what is actually coming up next in the day.
+     */
+    suspend fun loadNextTimedEvent(
+        accessToken: String,
+        calendarId: String,
+        days: Long = 30
+    ): CalendarAssistEvent? {
+
+        return withContext(
+            Dispatchers.IO
+        ) {
+
+            val now =
+                System.currentTimeMillis()
+
+            loadEventsBetweenInternal(
+                accessToken =
+                    accessToken,
+                calendarIds =
+                    listOf(
+                        calendarId
+                    ),
+                startMillis =
+                    now,
+                endMillis =
+                    now + days * 24L * 60L * 60L * 1000L
+            )
+                .filter { event ->
+                    !event.allDay &&
+                            event.startTime >= now
+                }
+                .minByOrNull {
+                    it.startTime
+                }
+        }
+    }
+
+
     suspend fun loadReadableCalendars(
         accessToken: String
     ): List<CalendarAssistCalendar> {

@@ -2171,19 +2171,102 @@ internal fun HomeScreenSettingsScreen(
                 }
             }
 
+            /*
+             * Chips above the prompt while typing "+": add the task
+             * to Google Tasks or Todoist.
+             */
             item {
                 SettingsControlCard {
-                    SettingsToggleRow(
-                        label = "weather",
-                        enabled = settings.showWeather,
-                        onToggle = { enabled ->
-                            onSettingsChange(
-                                settings.copy(
-                                    showWeather = enabled
+                    Column {
+                        SettingsToggleRow(
+                            label = "task picker",
+                            enabled = settings.showTaskPicker,
+                            onToggle = { enabled ->
+                                onSettingsChange(
+                                    settings.copy(
+                                        showTaskPicker = enabled
+                                    )
                                 )
+                            }
+                        )
+
+                        if (
+                            settings.showTaskPicker
+                        ) {
+                            Spacer(
+                                modifier = Modifier.height(6.dp)
+                            )
+
+                            SettingsToggleRow(
+                                label = "   google tasks",
+                                enabled = settings.taskChipGoogle,
+                                onToggle = { enabled ->
+                                    onSettingsChange(
+                                        settings.copy(
+                                            taskChipGoogle = enabled
+                                        )
+                                    )
+                                }
+                            )
+
+                            Spacer(
+                                modifier = Modifier.height(6.dp)
+                            )
+
+                            SettingsToggleRow(
+                                label = "   todoist",
+                                enabled = settings.taskChipTodoist,
+                                onToggle = { enabled ->
+                                    onSettingsChange(
+                                        settings.copy(
+                                            taskChipTodoist = enabled
+                                        )
+                                    )
+                                }
                             )
                         }
-                    )
+                    }
+                }
+            }
+
+            item {
+                SettingsControlCard {
+                    Column {
+                        SettingsToggleRow(
+                            label = "weather",
+                            enabled = settings.showWeather,
+                            onToggle = { enabled ->
+                                onSettingsChange(
+                                    settings.copy(
+                                        showWeather = enabled
+                                    )
+                                )
+                            }
+                        )
+
+                        /*
+                         * Off shows °F, on shows °C.
+                         */
+                        if (
+                            settings.showWeather
+                        ) {
+                            Spacer(
+                                modifier = Modifier.height(6.dp)
+                            )
+
+                            SettingsToggleRow(
+                                label = "   celsius (°C)",
+                                enabled = settings.weatherCelsius,
+                                onToggle = { enabled ->
+                                    onSettingsChange(
+                                        settings.copy(
+                                            weatherCelsius = enabled
+                                        )
+                                    )
+                                }
+                            )
+                        }
+                    }
                 }
             }
 
